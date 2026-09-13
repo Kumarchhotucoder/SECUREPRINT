@@ -91,12 +91,11 @@ const EditShopDetailsModal = ({ shop, isOpen, onClose, onUpdated }) => {
       zIndex: 100,
       padding: 'var(--space-4)'
     }}>
-      <div className="card animate-fadeIn" style={{
+      <div className="card animate-fadeIn admin-modal" style={{
         maxWidth: 620,
         width: '100%',
         maxHeight: '92vh',
         overflowY: 'auto',
-        padding: '28px',
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
         border: '1px solid var(--color-border)',
         borderRadius: 'var(--radius-xl)',
@@ -162,7 +161,7 @@ const EditShopDetailsModal = ({ shop, isOpen, onClose, onUpdated }) => {
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+            <div className="admin-modal-grid-2" style={{ marginBottom: '14px' }}>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--color-text)' }}>
                   Contact Phone
@@ -193,7 +192,7 @@ const EditShopDetailsModal = ({ shop, isOpen, onClose, onUpdated }) => {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px' }}>
+            <div className="admin-modal-grid-2">
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--color-text)' }}>
                   Street / Area
@@ -245,7 +244,7 @@ const EditShopDetailsModal = ({ shop, isOpen, onClose, onUpdated }) => {
               Custom Print Rates (Per Page)
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div className="admin-modal-grid-2">
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--color-primary)' }}>
                   Black & White Rate (₹)

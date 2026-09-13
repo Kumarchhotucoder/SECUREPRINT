@@ -408,21 +408,14 @@ const StatusPage = () => {
             </div>
 
             {/* Payment Method Selector Tabs */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
+            <div className="status-payment-tabs">
               <button
                 type="button"
-                className="btn"
+                className="btn status-payment-btn"
                 style={{
                   background: paymentTab === 'ONLINE' ? '#1A56DB' : '#F1F5F9',
                   color: paymentTab === 'ONLINE' ? 'white' : '#475569',
-                  border: paymentTab === 'ONLINE' ? 'none' : '1px solid #CBD5E1',
-                  fontWeight: 700,
-                  fontSize: 'var(--font-size-sm)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  height: 46
+                  border: paymentTab === 'ONLINE' ? 'none' : '1px solid #CBD5E1'
                 }}
                 onClick={() => setPaymentTab('ONLINE')}
               >
@@ -431,18 +424,11 @@ const StatusPage = () => {
 
               <button
                 type="button"
-                className="btn"
+                className="btn status-payment-btn"
                 style={{
                   background: paymentTab === 'CASH' ? '#059669' : '#F1F5F9',
                   color: paymentTab === 'CASH' ? 'white' : '#475569',
-                  border: paymentTab === 'CASH' ? 'none' : '1px solid #CBD5E1',
-                  fontWeight: 700,
-                  fontSize: 'var(--font-size-sm)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  height: 46
+                  border: paymentTab === 'CASH' ? 'none' : '1px solid #CBD5E1'
                 }}
                 onClick={() => setPaymentTab('CASH')}
               >
@@ -458,25 +444,15 @@ const StatusPage = () => {
                   <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 700, color: '#475569', marginBottom: 'var(--space-2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     Tap to pay with your UPI app:
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--space-2)' }}>
+                  <div className="status-upi-grid">
                     {/* Google Pay */}
                     <a
                       href={`upi://pay?pa=secureprint@upi&pn=${encodeURIComponent(job?.shopId?.name || 'SecurePrint')}&am=${payableAmount}&cu=INR&tn=Job_${job?.jobNumber || 'Print'}`}
-                      className="btn btn-secondary"
+                      className="btn btn-secondary upi-app-launcher"
                       style={{
-                        padding: '10px 6px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 4,
                         border: '1.5px solid #E2E8F0',
                         background: 'white',
-                        textDecoration: 'none',
-                        color: '#1E293B',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        borderRadius: 'var(--radius-lg)'
+                        color: '#1E293B'
                       }}
                       onClick={() => toast.success('Opening Google Pay / UPI app...')}
                     >
@@ -487,21 +463,11 @@ const StatusPage = () => {
                     {/* PhonePe */}
                     <a
                       href={`phonepe://pay?pa=secureprint@upi&pn=${encodeURIComponent(job?.shopId?.name || 'SecurePrint')}&am=${payableAmount}&cu=INR&tn=Job_${job?.jobNumber || 'Print'}`}
-                      className="btn btn-secondary"
+                      className="btn btn-secondary upi-app-launcher"
                       style={{
-                        padding: '10px 6px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 4,
                         border: '1.5px solid #5F259F',
                         background: '#FAF5FF',
-                        textDecoration: 'none',
-                        color: '#5F259F',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        borderRadius: 'var(--radius-lg)'
+                        color: '#5F259F'
                       }}
                       onClick={() => toast.success('Opening PhonePe...')}
                     >
@@ -512,21 +478,11 @@ const StatusPage = () => {
                     {/* Paytm */}
                     <a
                       href={`paytmmp://pay?pa=secureprint@upi&pn=${encodeURIComponent(job?.shopId?.name || 'SecurePrint')}&am=${payableAmount}&cu=INR&tn=Job_${job?.jobNumber || 'Print'}`}
-                      className="btn btn-secondary"
+                      className="btn btn-secondary upi-app-launcher"
                       style={{
-                        padding: '10px 6px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 4,
                         border: '1.5px solid #00BAF2',
                         background: '#F0F9FF',
-                        textDecoration: 'none',
-                        color: '#0369A1',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        borderRadius: 'var(--radius-lg)'
+                        color: '#0369A1'
                       }}
                       onClick={() => toast.success('Opening Paytm...')}
                     >

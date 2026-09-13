@@ -173,6 +173,13 @@ p { line-height: 1.7; }
 .gap-2 { gap: var(--space-2); }
 .gap-3 { gap: var(--space-3); }
 .gap-4 { gap: var(--space-4); }
+
+@media (max-width: 768px) {
+  .desktop-only { display: none !important; }
+}
+@media (min-width: 769px) {
+  .mobile-only { display: none !important; }
+}
 .gap-6 { gap: var(--space-6); }
 .gap-8 { gap: var(--space-8); }
 .w-full { width: 100%; }
@@ -1672,5 +1679,225 @@ p { line-height: 1.7; }
     padding: 12px;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   CUSTOMER FLOW & CHECKOUT RESPONSIVE SYSTEM
+═══════════════════════════════════════════════════════════ */
+.customer-send-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.customer-send-btn {
+  min-width: 240px;
+  height: 52px;
+  font-size: var(--font-size-base);
+  font-weight: 800;
+  box-shadow: var(--shadow-primary);
+  gap: 10px;
+}
+
+.customer-config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.status-payment-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.status-payment-btn {
+  font-weight: 700;
+  font-size: var(--font-size-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 46px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: center;
+}
+
+.status-upi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.upi-app-launcher {
+  padding: 10px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-decoration: none;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: var(--radius-lg);
+  min-height: 52px;
+}
+
+@media (max-width: 640px) {
+  .customer-send-card {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  .customer-send-btn {
+    width: 100% !important;
+    min-width: unset !important;
+  }
+  .customer-header-bar {
+    padding: var(--space-2) var(--space-3) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .status-payment-tabs {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .status-payment-btn {
+    width: 100%;
+    min-height: 48px;
+    font-size: 14px;
+  }
+  .customer-config-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ULTRA-COMPACT SCREENS (320px – 360px) ZERO OVERFLOW RULES
+═══════════════════════════════════════════════════════════ */
+@media (max-width: 360px) {
+  :root {
+    --space-4: 0.75rem;
+    --space-6: 1rem;
+    --space-8: 1.25rem;
+  }
+
+  body {
+    font-size: 14px;
+  }
+
+  .container, .container-lg, .container-xl {
+    padding: 0 8px !important;
+  }
+
+  .card, .card-lg {
+    padding: 12px 10px !important;
+    border-radius: var(--radius-md) !important;
+  }
+
+  .job-card {
+    padding: 12px 10px !important;
+  }
+
+  .job-number {
+    font-size: 1.25rem !important;
+  }
+
+  .btn {
+    padding: 10px 12px !important;
+    font-size: 13px !important;
+  }
+
+  .btn-lg {
+    padding: 12px 14px !important;
+    font-size: 14px !important;
+    min-height: 46px !important;
+  }
+
+  .status-upi-grid {
+    grid-template-columns: 1fr 1fr 1fr !important;
+    gap: 4px !important;
+  }
+
+  .upi-app-launcher {
+    padding: 6px 2px !important;
+    font-size: 10px !important;
+  }
+
+  .upi-app-launcher span {
+    font-size: 1rem !important;
+  }
+
+  .navbar-brand {
+    font-size: 15px !important;
+    gap: 6px !important;
+  }
+
+  .navbar-brand .brand-icon {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  .admin-modal {
+    padding: 12px 8px !important;
+    width: calc(100% - 12px) !important;
+  }
+
+  .dashboard-header {
+    padding: 8px 10px !important;
+  }
+
+  .dashboard-content {
+    padding: 10px 8px !important;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+  }
+
+  .stat-card {
+    padding: 8px !important;
+  }
+
+  .stat-value {
+    font-size: 1.1rem !important;
+  }
+
+  .stat-label {
+    font-size: 10px !important;
+  }
+
+  .stat-icon {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  .qr-image {
+    max-width: 140px !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TOAST RESPONSIVE CONTAINER
+═══════════════════════════════════════════════════════════ */
+div[data-rht-toaster] {
+  max-width: calc(100vw - 20px) !important;
+  margin: 0 auto !important;
+}
+
+div[data-rht-toaster] > div {
+  max-width: calc(100vw - 24px) !important;
+  word-break: break-word !important;
+  font-size: 13px !important;
+}
+
 
 

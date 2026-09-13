@@ -355,15 +355,14 @@ const ScanPage = () => {
                         }}>
                           {isPdf ? <FileText size={18} /> : <ImageIcon size={18} />}
                         </div>
-                        <div style={{ minWidth: 0 }}>
+                        <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
                           <div style={{
                             fontWeight: 600,
                             fontSize: 'var(--font-size-sm)',
                             color: 'var(--color-text)',
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            maxWidth: 220
+                            textOverflow: 'ellipsis'
                           }}>
                             {file.name}
                           </div>
@@ -533,6 +532,7 @@ const ScanPage = () => {
         background: 'white',
         borderTop: '1px solid var(--color-border)',
         padding: 'var(--space-3) var(--space-4)',
+        paddingBottom: 'max(var(--space-3), env(safe-area-inset-bottom))',
         boxShadow: '0 -4px 20px rgba(0,0,0,0.08)',
         zIndex: 100
       }}>

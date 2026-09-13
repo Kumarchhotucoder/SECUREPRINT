@@ -194,7 +194,7 @@ const ShopRegister = () => {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 130px), 1fr))', gap: 'var(--space-3)' }}>
                 <div className="input-group">
                   <label className="input-label">B&W Rate (₹/page)</label>
                   <input
@@ -254,7 +254,7 @@ const ShopRegister = () => {
               SecurePrint charges a flat platform subscription. You receive 100% of your printing earnings directly from your customers.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 'var(--space-3)', marginBottom: 'var(--space-6)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 'var(--space-3)', marginBottom: 'var(--space-6)' }}>
               {(plans.length > 0 ? plans : [
                 { id: 'TRIAL', name: 'Free Trial', price: 0, durationDays: 7, features: ['7 Days Full Access', 'Permanent Shop QR', 'Up to 50 Print Jobs'] },
                 { id: 'STARTER', name: 'Starter Partner', price: 499, durationDays: 30, features: ['30 Days Access', 'Permanent Standee QR', 'Up to 500 Print Jobs/mo', 'Automatic 10s Cleanup'] },

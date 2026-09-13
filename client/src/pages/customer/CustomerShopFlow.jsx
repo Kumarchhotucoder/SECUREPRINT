@@ -285,11 +285,11 @@ const CustomerShopFlow = () => {
               <span className="badge badge-verified" style={{ marginBottom: 'var(--space-2)' }}>
                 <CheckCircle size={12} /> Verified Printing Counter
               </span>
-              <h1 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 800, color: 'var(--color-text)' }}>
+              <h1 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 800, color: 'var(--color-text)', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                 {shop?.name}
               </h1>
               {shop?.address?.city && (
-                <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)' }}>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)', wordBreak: 'break-word' }}>
                   {shop.address.street ? `${shop.address.street}, ` : ''}{shop.address.city}
                 </p>
               )}
@@ -373,29 +373,30 @@ const CustomerShopFlow = () => {
         zIndex: 20,
         boxShadow: 'var(--shadow-sm)'
       }}>
-        <div style={{ maxWidth: 860, margin: '0 auto', padding: 'var(--space-3) var(--space-4)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ maxWidth: 860, margin: '0 auto', padding: 'var(--space-3) var(--space-4)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <div style={{
               width: 38, height: 38,
               borderRadius: 'var(--radius-md)',
               background: 'var(--color-primary)',
               color: 'white',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0
             }}>
               <Shield size={20} />
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 800, fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>
                 SecurePrint
               </div>
-              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 Sending to: <strong>{shop?.name}</strong>
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span className="badge badge-verified" style={{ fontSize: 'var(--font-size-xs)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <span className="badge badge-verified" style={{ fontSize: 'var(--font-size-xs)', whiteSpace: 'nowrap' }}>
               <Lock size={12} /> E2E Encrypted
             </span>
           </div>
@@ -502,14 +503,14 @@ const CustomerShopFlow = () => {
                     border: '1px solid var(--color-border)'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1, overflow: 'hidden' }}>
                     {file.type.includes('pdf') ? (
-                      <FileText size={24} color="#EF4444" />
+                      <FileText size={24} color="#EF4444" style={{ flexShrink: 0 }} />
                     ) : (
-                      <ImageIcon size={24} color="#3B82F6" />
+                      <ImageIcon size={24} color="#3B82F6" style={{ flexShrink: 0 }} />
                     )}
-                    <div style={{ overflow: 'hidden' }}>
-                      <div style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: 300 }}>
+                    <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                      <div style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
                         {file.name}
                       </div>
                       <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
@@ -545,7 +546,7 @@ const CustomerShopFlow = () => {
         </div>
 
         {/* Print Configuration Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
+        <div className="customer-config-grid">
           {/* Color Option */}
           <div className="card" style={{ padding: 'var(--space-4)' }}>
             <label className="form-label" style={{ fontWeight: 700, fontSize: 'var(--font-size-xs)', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>
@@ -635,7 +636,7 @@ const CustomerShopFlow = () => {
           boxShadow: 'var(--shadow-lg)',
           borderTop: '3px solid var(--color-primary)'
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+          <div className="customer-send-card">
             <div>
               <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
                 Estimated Total Amount
@@ -654,15 +655,7 @@ const CustomerShopFlow = () => {
             <button
               type="button"
               id="send-for-print-btn"
-              className="btn btn-primary btn-lg"
-              style={{
-                minWidth: 240,
-                height: 52,
-                fontSize: 'var(--font-size-base)',
-                fontWeight: 800,
-                boxShadow: 'var(--shadow-primary)',
-                gap: 10
-              }}
+              className="btn btn-primary btn-lg customer-send-btn"
               disabled={files.length === 0 || sending}
               onClick={handleSendForPrint}
             >

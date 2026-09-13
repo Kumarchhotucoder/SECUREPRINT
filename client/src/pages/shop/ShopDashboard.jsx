@@ -298,7 +298,7 @@ const DashboardHome = ({ shop, stats, refreshStats, socket, onOpenEditModal }) =
       </div>
 
       {/* Shop Info & Live Status Card */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 'var(--space-6)', marginBottom: 'var(--space-8)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 'var(--space-6)', marginBottom: 'var(--space-8)' }}>
         {/* Recent Jobs Preview */}
         <div className="card" style={{ padding: 'var(--space-6)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
@@ -898,11 +898,11 @@ const QRManagement = ({ shop }) => {
         {/* Action Buttons — NO REGENERATE BUTTON */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', width: '100%', marginTop: 'var(--space-6)' }}>
           {qrData && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 'var(--space-3)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))', gap: 'var(--space-3)' }}>
               <button
                 id="download-qr-btn"
                 className="btn btn-primary"
-                style={{ gap: 8, justifyContent: 'center' }}
+                style={{ gap: 8, justifyContent: 'center', minHeight: 44 }}
                 onClick={() => {
                   const link = document.createElement('a')
                   link.download = `${shop?.slug || 'shop'}-counter-qr.png`
@@ -917,7 +917,7 @@ const QRManagement = ({ shop }) => {
               <button
                 id="print-qr-btn"
                 className="btn btn-secondary"
-                style={{ gap: 8, justifyContent: 'center' }}
+                style={{ gap: 8, justifyContent: 'center', minHeight: 44 }}
                 onClick={handlePrintStandee}
               >
                 🖨️ Print QR Standee
@@ -930,9 +930,9 @@ const QRManagement = ({ shop }) => {
             target="_blank"
             rel="noreferrer"
             className="btn btn-ghost"
-            style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, wordBreak: 'break-all', textAlign: 'center', fontSize: '13px' }}
           >
-            <ExternalLink size={16} /> Open Customer Flow ({shopSlugUrl})
+            <ExternalLink size={16} style={{ flexShrink: 0 }} /> <span>Open Customer Flow</span>
           </a>
         </div>
       </div>

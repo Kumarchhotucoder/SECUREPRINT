@@ -49,7 +49,6 @@ const ReceiptPage = () => {
 
         {/* Receipt card */}
         <div className="card" style={{
-          padding: 'var(--space-8)',
           border: '2px solid var(--color-verified)',
           position: 'relative',
           overflow: 'hidden'

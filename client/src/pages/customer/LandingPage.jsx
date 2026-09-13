@@ -137,17 +137,17 @@ const LandingPage = () => {
             SecurePrint
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
             <div className="desktop-only" style={{ display: 'flex', gap: 'var(--space-4)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
               <a href="#how-it-works" style={{ color: 'var(--color-text-secondary)', textDecoration: 'none' }}>How it Works</a>
               <a href="#features" style={{ color: 'var(--color-text-secondary)', textDecoration: 'none' }}>Features</a>
               <a href="/plans" style={{ color: 'var(--color-text-secondary)', textDecoration: 'none' }}>Pricing</a>
             </div>
-            <a href="/shop/login" className="btn btn-ghost btn-sm">
-              Shop Login
+            <a href="/shop/login" className="btn btn-ghost btn-sm" style={{ padding: '6px 8px', fontSize: '13px' }}>
+              Login
             </a>
-            <a href="/shop/register" className="btn btn-primary btn-sm" style={{ fontWeight: 700 }}>
-              Register Shop
+            <a href="/shop/register" className="btn btn-primary btn-sm" style={{ fontWeight: 700, padding: '6px 10px', fontSize: '13px' }}>
+              Register
             </a>
           </div>
         </div>
@@ -186,18 +186,21 @@ const LandingPage = () => {
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 8,
+            justifyContent: 'center',
+            flexWrap: 'wrap',
+            gap: 6,
             background: '#F1F5F9',
             border: '1px solid #CBD5E1',
             borderRadius: 'var(--radius-full)',
-            padding: '6px 18px',
+            padding: '6px 12px',
             fontSize: 'var(--font-size-xs)',
             fontWeight: 800,
-            letterSpacing: '0.05em',
+            letterSpacing: '0.04em',
             color: '#334155',
-            marginBottom: 'var(--space-6)'
+            marginBottom: 'var(--space-6)',
+            maxWidth: '100%'
           }}>
-            <span>SCAN</span> → <span>UPLOAD</span> → <span>SEND</span> → <span>PRINT</span> → <span>PAY</span>
+            <span>SCAN</span> <span>→</span> <span>UPLOAD</span> <span>→</span> <span>SEND</span> <span>→</span> <span>PRINT</span> <span>→</span> <span>PAY</span>
           </div>
 
           <p style={{
@@ -211,7 +214,7 @@ const LandingPage = () => {
           </p>
 
           {/* Action buttons */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', maxWidth: 360, margin: '0 auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', maxWidth: 360, width: '100%', margin: '0 auto' }}>
             <button
               id="scan-qr-btn"
               className="btn btn-primary btn-lg"
@@ -356,7 +359,7 @@ const LandingPage = () => {
 
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 240px), 1fr))',
             gap: 'var(--space-6)'
           }}>
             {[
@@ -408,7 +411,7 @@ const LandingPage = () => {
 
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))',
             gap: 'var(--space-6)'
           }}>
             <div className="card">
@@ -454,7 +457,7 @@ const LandingPage = () => {
 
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))',
             gap: 'var(--space-6)',
             maxWidth: 960,
             margin: '0 auto'
