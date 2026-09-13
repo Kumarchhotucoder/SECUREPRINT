@@ -43,24 +43,32 @@ const LandingPage = () => {
         supportedScanTypes: []
       }, false)
 
+      const handleDecodedQR = (decodedText) => {
+        let path = null
+        try {
+          const url = new URL(decodedText, window.location.origin)
+          const p = url.pathname
+          if (p.includes('/s/') || p.includes('/shop/') || p.includes('/scan/')) {
+            path = p + url.search
+          }
+        } catch {
+          if (decodedText.startsWith('/s/') || decodedText.startsWith('/shop/') || decodedText.startsWith('/scan/')) {
+            path = decodedText
+          }
+        }
+
+        if (path) {
+          navigate(path)
+        } else {
+          toast.error('Not a valid SecurePrint shop QR code.')
+        }
+      }
+
       scanner.render(
         (decodedText) => {
           scanner.clear()
           setShowScannerModal(false)
-          try {
-            if (decodedText.includes('/scan/')) {
-              const url = new URL(decodedText, window.location.origin)
-              navigate(url.pathname + url.search)
-            } else {
-              toast.error('Not a valid SecurePrint shop QR code.')
-            }
-          } catch {
-            if (decodedText.startsWith('/scan/')) {
-              navigate(decodedText)
-            } else {
-              toast.error('Invalid QR code format.')
-            }
-          }
+          handleDecodedQR(decodedText)
         },
         () => {}
       )
@@ -85,11 +93,21 @@ const LandingPage = () => {
       const decodedText = await html5QrCode.scanFile(file, true)
       setShowScannerModal(false)
 
-      if (decodedText.includes('/scan/')) {
+      let path = null
+      try {
         const url = new URL(decodedText, window.location.origin)
-        navigate(url.pathname + url.search)
-      } else if (decodedText.startsWith('/scan/')) {
-        navigate(decodedText)
+        const p = url.pathname
+        if (p.includes('/s/') || p.includes('/shop/') || p.includes('/scan/')) {
+          path = p + url.search
+        }
+      } catch {
+        if (decodedText.startsWith('/s/') || decodedText.startsWith('/shop/') || decodedText.startsWith('/scan/')) {
+          path = decodedText
+        }
+      }
+
+      if (path) {
+        navigate(path)
       } else {
         toast.error('This image does not contain a valid SecurePrint QR code.')
       }
@@ -328,13 +346,13 @@ const LandingPage = () => {
       )}
 
       {/* How it works */}
-      <section style={{ padding: 'var(--space-16) var(--space-4)' }}>
+      <section id="how-it-works" style={{ padding: 'var(--space-16) var(--space-4)' }}>
         <div className="container-lg">
           <h2 style={{ textAlign: 'center', marginBottom: 'var(--space-4)', fontSize: 'var(--font-size-3xl)' }}>
             How it works
           </h2>
           <p style={{ textAlign: 'center', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-12)', fontSize: 'var(--font-size-lg)' }}>
-            Four simple steps. Just like sending money on PhonePe, but for printing.
+            Four simple steps. Scan, upload, pay, and your files are permanently gone.
           </p>
 
           <div style={{
@@ -343,10 +361,10 @@ const LandingPage = () => {
             gap: 'var(--space-6)'
           }}>
             {[
-              { icon: <QrCode size={28} />, step: '01', title: 'Scan Counter QR', desc: 'Scan the SecurePrint counter QR with your phone camera or our scanner.', color: '#EFF6FF', iconColor: 'var(--color-primary)' },
-              { icon: <Upload size={28} />, step: '02', title: 'Pick PDF / Photo', desc: 'Select Aadhaar, bills, resumes, or photos directly from your device.', color: '#F0FDF4', iconColor: 'var(--color-verified)' },
-              { icon: <Shield size={28} />, step: '03', title: 'One-Tap Send', desc: 'Pick B&W or Colour, tap Send. Document instantly hits the shop queue.', color: '#FFF7ED', iconColor: '#D97706' },
-              { icon: <Trash2 size={28} />, step: '04', title: 'Auto-Deleted', desc: 'Once printed by the shop, files are wiped from storage permanently.', color: '#FDF4FF', iconColor: '#9333EA' }
+              { icon: <QrCode size={28} />, step: '01', title: 'Scan Counter QR', desc: 'Scan the SecurePrint counter QR with any phone camera (iPhone, Android, Google Lens).', color: '#EFF6FF', iconColor: 'var(--color-primary)' },
+              { icon: <Upload size={28} />, step: '02', title: 'Pick PDF / Photo', desc: 'Select Aadhaar, tickets, resumes, or photos securely without saving any shop numbers.', color: '#F0FDF4', iconColor: 'var(--color-verified)' },
+              { icon: <Shield size={28} />, step: '03', title: 'Direct to Machine', desc: 'Pick B&W or Colour and tap Send. Document instantly hits the merchant queue.', color: '#FFF7ED', iconColor: '#D97706' },
+              { icon: <Trash2 size={28} />, step: '04', title: '10s Auto-Cleanup', desc: 'Post-payment, underlying files are physically destroyed from cloud storage.', color: '#FDF4FF', iconColor: '#9333EA' }
             ].map((item, i) => (
               <div key={i} className="card animate-slideUp" style={{ animationDelay: `${i * 0.1}s` }}>
                 <div style={{
@@ -375,6 +393,142 @@ const LandingPage = () => {
                 <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>{item.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section id="features" style={{ padding: 'var(--space-16) var(--space-4)', background: '#F8FAFC' }}>
+        <div className="container-lg">
+          <h2 style={{ textAlign: 'center', marginBottom: 'var(--space-4)', fontSize: 'var(--font-size-3xl)' }}>
+            Why SecurePrint for Cyber & Photocopy Shops?
+          </h2>
+          <p style={{ textAlign: 'center', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-12)', fontSize: 'var(--font-size-lg)', maxWidth: 640, margin: '0 auto var(--space-12)' }}>
+            Built specifically for Indian cyber cafes, university xerox centers, and commercial print shops.
+          </p>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: 'var(--space-6)'
+          }}>
+            <div className="card">
+              <h3 style={{ fontSize: 'var(--font-size-lg)', marginBottom: 8, color: 'var(--color-primary)' }}>🚫 Zero WhatsApp Clutter</h3>
+              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+                Stop sharing personal mobile numbers. No more saving contacts, random WhatsApp messages, or customer chats.
+              </p>
+            </div>
+
+            <div className="card">
+              <h3 style={{ fontSize: 'var(--font-size-lg)', marginBottom: 8, color: '#059669' }}>🔒 Guaranteed Privacy (10s Deletion)</h3>
+              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+                Customers trust you with sensitive Aadhaar cards and bank statements. Files are unlinked and destroyed right after payment.
+              </p>
+            </div>
+
+            <div className="card">
+              <h3 style={{ fontSize: 'var(--font-size-lg)', marginBottom: 8, color: '#D97706' }}>⚡ Live Merchant Queue</h3>
+              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+                Real-time WebSocket alerts ping the shopkeeper when jobs arrive. One-click print directly to physical printers.
+              </p>
+            </div>
+
+            <div className="card">
+              <h3 style={{ fontSize: 'var(--font-size-lg)', marginBottom: 8, color: '#4F46E5' }}>📊 Today's IST Revenue Reset</h3>
+              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+                Daily business counters automatically start fresh at midnight IST while lifetime sales analytics are strictly preserved.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SaaS Pricing Section */}
+      <section id="pricing" style={{ padding: 'var(--space-16) var(--space-4)' }}>
+        <div className="container-lg" style={{ textAlign: 'center' }}>
+          <h2 style={{ marginBottom: 'var(--space-4)', fontSize: 'var(--font-size-3xl)' }}>
+            Simple, Transparent SaaS Pricing
+          </h2>
+          <p style={{ color: 'var(--color-text-secondary)', marginBottom: 'var(--space-12)', fontSize: 'var(--font-size-lg)' }}>
+            Start with our 30-day free trial. Upgrade anytime as your shop scales.
+          </p>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 'var(--space-6)',
+            maxWidth: 960,
+            margin: '0 auto'
+          }}>
+            {/* Free Trial */}
+            <div className="card" style={{ padding: 'var(--space-8) var(--space-6)', border: '1px solid #E2E8F0' }}>
+              <h3 style={{ fontSize: 'var(--font-size-xl)' }}>Free Trial</h3>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-4)' }}>For new shops testing SecurePrint</p>
+              <div style={{ fontSize: 36, fontWeight: 900, marginBottom: 'var(--space-6)', color: 'var(--color-text)' }}>
+                ₹0 <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500, color: 'var(--color-text-muted)' }}>/ 30 days</span>
+              </div>
+              <ul style={{ textAlign: 'left', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 2, marginBottom: 'var(--space-6)' }}>
+                <li>✓ 1 Permanent Shop QR</li>
+                <li>✓ Up to 100 Print Jobs / mo</li>
+                <li>✓ 10-Second Auto File Cleanup</li>
+                <li>✓ Today's Daily Revenue Dashboard</li>
+              </ul>
+              <button onClick={() => navigate('/shop/register')} className="btn btn-secondary w-full">
+                Start Free Trial
+              </button>
+            </div>
+
+            {/* Starter Plan */}
+            <div className="card" style={{ padding: 'var(--space-8) var(--space-6)', border: '2px solid var(--color-primary)', position: 'relative' }}>
+              <div style={{
+                position: 'absolute',
+                top: -12,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                background: 'var(--color-primary)',
+                color: 'white',
+                padding: '2px 12px',
+                borderRadius: 'var(--radius-full)',
+                fontSize: 'var(--font-size-xs)',
+                fontWeight: 700
+              }}>
+                MOST POPULAR
+              </div>
+              <h3 style={{ fontSize: 'var(--font-size-xl)' }}>Starter Plan</h3>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-4)' }}>For busy cyber cafes & xerox shops</p>
+              <div style={{ fontSize: 36, fontWeight: 900, marginBottom: 'var(--space-6)', color: 'var(--color-primary)' }}>
+                ₹499 <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500, color: 'var(--color-text-muted)' }}>/ month</span>
+              </div>
+              <ul style={{ textAlign: 'left', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 2, marginBottom: 'var(--space-6)' }}>
+                <li>✓ Permanent Custom Counter QR Standee</li>
+                <li>✓ Unlimited Customer Print Jobs</li>
+                <li>✓ Dual Razorpay Gateway Integration</li>
+                <li>✓ Instant WebSocket Queue Alerts</li>
+                <li>✓ Priority Customer Support</li>
+              </ul>
+              <button onClick={() => navigate('/shop/register')} className="btn btn-primary w-full">
+                Get Started
+              </button>
+            </div>
+
+            {/* Pro Business */}
+            <div className="card" style={{ padding: 'var(--space-8) var(--space-6)', border: '1px solid #E2E8F0' }}>
+              <h3 style={{ fontSize: 'var(--font-size-xl)' }}>Business Pro</h3>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-4)' }}>Multi-printer centers & chains</p>
+              <div style={{ fontSize: 36, fontWeight: 900, marginBottom: 'var(--space-6)', color: 'var(--color-text)' }}>
+                ₹999 <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500, color: 'var(--color-text-muted)' }}>/ month</span>
+              </div>
+              <ul style={{ textAlign: 'left', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 2, marginBottom: 'var(--space-6)' }}>
+                <li>✓ Everything in Starter</li>
+                <li>✓ Multiple Staff Operator Accounts</li>
+                <li>✓ Advanced Customer Analytics & Export</li>
+                <li>✓ Custom Shop Subdomains</li>
+                <li>✓ 24/7 Dedicated Support</li>
+              </ul>
+              <button onClick={() => navigate('/shop/register')} className="btn btn-secondary w-full">
+                Choose Pro
+              </button>
+            </div>
           </div>
         </div>
       </section>

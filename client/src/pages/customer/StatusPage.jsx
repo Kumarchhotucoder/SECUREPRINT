@@ -56,8 +56,8 @@ const StatusPage = () => {
 
   // Real-time Socket.IO synchronization
   useEffect(() => {
-    if (!jobId) return
-    const socket = io('/', { transports: ['websocket'] })
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || '/'
+    const socket = io(socketUrl, { transports: ['websocket', 'polling'] })
 
     socket.emit('join-job', jobId)
 

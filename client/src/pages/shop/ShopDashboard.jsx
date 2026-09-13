@@ -1002,7 +1002,8 @@ const ShopDashboard = () => {
       const s = res.data.data
       setShop(s)
       // Connect socket and join shop room
-      const sock = io('/', { transports: ['websocket'] })
+      const socketUrl = import.meta.env.VITE_SOCKET_URL || '/'
+      const sock = io(socketUrl, { transports: ['websocket', 'polling'] })
       sock.emit('join-shop', s._id)
       setSocket(sock)
       return s
