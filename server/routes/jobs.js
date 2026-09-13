@@ -95,12 +95,16 @@ router.post('/', async (req, res, next) => {
     // Notify shop dashboard via Socket.IO
     const io = req.app.get('io');
     if (io) {
-      io.to(`shop-${session.shopId}`).emit('new-job', {
-        jobId: job._id,
+      const shopRoomId = `shop-${session.shopId.toString()}`;
+      io.to(shopRoomId).emit('new-job', {
+        jobId: job._id.toString(),
         jobNumber: job.jobNumber,
         customerName: job.customerName,
         totalFiles: job.totalFiles,
         totalPages: job.totalPages,
+        estimatedPrice: pricing.estimatedPrice,
+        colorMode: job.colorMode,
+        paperSize: job.paperSize,
         status: job.status,
         createdAt: job.createdAt
       });
@@ -192,10 +196,11 @@ router.post('/:id/receive', authenticate, requireShopkeeper, async (req, res, ne
     job.statusHistory.push({ status: 'RECEIVED', timestamp: new Date() });
     await job.save();
 
-    // Notify customer
+    // Notify customer & shop
     const io = req.app.get('io');
     if (io) {
-      io.to(`job-${job._id}`).emit('job-status', { jobId: job._id, status: 'RECEIVED', shopName: shop.name });
+      io.to(`job-${job._id}`).emit('job-status', { jobId: job._id.toString(), status: 'RECEIVED', shopName: shop.name });
+      io.to(`shop-${shop._id.toString()}`).emit('job-updated', { jobId: job._id.toString(), status: 'RECEIVED' });
     }
 
     res.json({ success: true, data: { status: job.status } });
@@ -254,7 +259,8 @@ router.post('/:id/print', authenticate, requireShopkeeper, async (req, res, next
 
     const io = req.app.get('io');
     if (io) {
-      io.to(`job-${job._id}`).emit('job-status', { jobId: job._id, status: 'PRINTING', shopName: shop.name });
+      io.to(`job-${job._id}`).emit('job-status', { jobId: job._id.toString(), status: 'PRINTING', shopName: shop.name });
+      io.to(`shop-${shop._id.toString()}`).emit('job-updated', { jobId: job._id.toString(), status: 'PRINTING' });
     }
 
     res.json({ success: true, data: { status: job.status } });

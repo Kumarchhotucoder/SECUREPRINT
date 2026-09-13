@@ -247,13 +247,26 @@ router.post('/verify', async (req, res, next) => {
         cleanupScheduledAt: cleanupSchedule.scheduledAt
       });
 
-      io.to(`shop-${job.shopId._id}`).emit('job-updated', {
-        jobId: job._id.toString(),
-        status: 'CLEANUP_COUNTDOWN',
-        paymentStatus: 'PAID',
-        amount: payment.amount,
-        paidAt: paidAt.toISOString()
-      });
+      const targetShopId = (job.shopId?._id || job.shopId)?.toString();
+      if (targetShopId) {
+        io.to(`shop-${targetShopId}`).emit('job-updated', {
+          jobId: job._id.toString(),
+          jobNumber: job.jobNumber,
+          customerName: job.customerName,
+          status: 'CLEANUP_COUNTDOWN',
+          paymentStatus: 'PAID',
+          amount: payment.amount,
+          paidAt: paidAt.toISOString()
+        });
+
+        io.to(`shop-${targetShopId}`).emit('payment-received', {
+          jobId: job._id.toString(),
+          jobNumber: job.jobNumber,
+          customerName: job.customerName,
+          amount: payment.amount,
+          paidAt: paidAt.toISOString()
+        });
+      }
     }
 
     res.json({

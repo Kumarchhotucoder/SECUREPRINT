@@ -136,12 +136,23 @@ const deleteJobFiles = async (jobId, reason = 'COMPLETED', io = null) => {
       });
 
       // Shopkeeper room (to update queue/history cards in real time)
-      io.to(`shop-${job.shopId}`).emit('job-updated', {
-        jobId: job._id.toString(),
-        status: job.status,
-        filesDeleted: true,
-        deletedAt: now
-      });
+      const targetShopId = (job.shopId?._id || job.shopId)?.toString();
+      if (targetShopId) {
+        io.to(`shop-${targetShopId}`).emit('job-updated', {
+          jobId: job._id.toString(),
+          jobNumber: job.jobNumber,
+          status: job.status,
+          filesDeleted: true,
+          deletedAt: now
+        });
+
+        io.to(`shop-${targetShopId}`).emit('job-files-deleted', {
+          jobId: job._id.toString(),
+          jobNumber: job.jobNumber,
+          filesDeleted: true,
+          deletedAt: now
+        });
+      }
 
       // Session room
       io.to(`session-${job.sessionId}`).emit('session-deleted', {

@@ -19,6 +19,9 @@ const adminRoutes = require('./routes/admin');
 const cleanupRoutes = require('./routes/cleanup');
 const paymentRoutes = require('./routes/payments');
 const subscriptionRoutes = require('./routes/subscriptions');
+const printerRoutes = require('./routes/printers');
+const Agent = require('./models/Agent');
+const Printer = require('./models/Printer');
 const { resumePendingCleanups } = require('./utils/deletion');
 
 // Ensure uploads directory exists
@@ -89,6 +92,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/cleanup', cleanupRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/printers', printerRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -129,7 +133,69 @@ io.on('connection', (socket) => {
   socket.on('join-session', (sessionId) => {
     socket.join(`session-${sessionId}`);
   });
-  socket.on('disconnect', () => {});
+
+  // Agent connection handler
+  socket.on('join-agent', async ({ agentId, shopId }) => {
+    if (!agentId || !shopId) return;
+    socket.agentId = agentId;
+    socket.shopId = shopId;
+    socket.join(`agent-${agentId}`);
+
+    try {
+      await Agent.findOneAndUpdate(
+        { agentId, shopId },
+        { status: 'ONLINE', lastSeenAt: new Date() }
+      );
+      io.to(`shop-${shopId}`).emit('agent-status-changed', {
+        agentId,
+        status: 'ONLINE',
+        lastSeenAt: new Date()
+      });
+      console.log(`[AGENT CONNECTED] Agent ${agentId} online for Shop ${shopId}`);
+    } catch (e) {
+      console.error('[AGENT SOCKET ERROR]', e.message);
+    }
+  });
+
+  socket.on('agent-heartbeat', async ({ agentId, shopId }) => {
+    if (!agentId) return;
+    try {
+      await Agent.findOneAndUpdate(
+        { agentId },
+        { status: 'ONLINE', lastSeenAt: new Date() }
+      );
+    } catch (e) {}
+  });
+
+  socket.on('disconnect', async () => {
+    if (socket.agentId && socket.shopId) {
+      const { agentId, shopId } = socket;
+      try {
+        const agent = await Agent.findOneAndUpdate(
+          { agentId, shopId },
+          { status: 'OFFLINE', lastSeenAt: new Date() },
+          { new: true }
+        );
+
+        if (agent) {
+          // Mark this agent's printers as OFFLINE
+          await Printer.updateMany(
+            { agentId: agent._id },
+            { status: 'OFFLINE', lastSeenAt: new Date() }
+          );
+
+          io.to(`shop-${shopId}`).emit('agent-status-changed', {
+            agentId,
+            status: 'OFFLINE',
+            lastSeenAt: new Date()
+          });
+          console.log(`[AGENT DISCONNECTED] Agent ${agentId} offline for Shop ${shopId}`);
+        }
+      } catch (e) {
+        console.error('[AGENT DISCONNECT ERROR]', e.message);
+      }
+    }
+  });
 });
 
 // Connect DB then start

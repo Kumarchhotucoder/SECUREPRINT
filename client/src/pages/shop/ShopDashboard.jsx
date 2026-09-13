@@ -7,11 +7,14 @@ import {
   Shield, LayoutDashboard, PrinterIcon, QrCode, History,
   LogOut, Menu, X, RefreshCw, ChevronRight,
   CheckCircle, Clock, AlertCircle, FileText, Image, File,
-  Play, Check, XCircle, Eye, ExternalLink, Sparkles, MapPin, Tag, Users
+  Play, Check, XCircle, Eye, ExternalLink, Sparkles, MapPin, Tag, Users, Laptop
 } from 'lucide-react'
 import api from '../../lib/api'
 import EditShopDetailsModal from './EditShopDetailsModal'
 import ShopSetupScreen from './ShopSetupScreen'
+import PrinterManagement from './PrinterManagement'
+import SmartPrintModal from './SmartPrintModal'
+import { showTopAlert } from '../../utils/notifications'
 
 
 // ── Sidebar Navigation ─────────────────────────────────────────
@@ -28,6 +31,7 @@ const Sidebar = ({ shop, open, onClose, onOpenEditModal }) => {
   const navItems = [
     { path: '/shop/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} />, end: true },
     { path: '/shop/dashboard/queue', label: 'Print Queue', icon: <PrinterIcon size={18} /> },
+    { path: '/shop/dashboard/printers', label: 'Printers & Agent', icon: <PrinterIcon size={18} /> },
     { path: '/shop/dashboard/qr', label: 'Shop QR', icon: <QrCode size={18} /> },
     { path: '/shop/dashboard/history', label: 'History', icon: <History size={18} /> },
   ]
@@ -109,7 +113,7 @@ const Sidebar = ({ shop, open, onClose, onOpenEditModal }) => {
 }
 
 // ── Dashboard Overview ─────────────────────────────────────────
-const DashboardHome = ({ shop, stats, refreshStats, socket, onOpenEditModal }) => {
+const DashboardHome = ({ shop, stats, refreshStats, socket, refreshTrigger, onOpenEditModal }) => {
   const navigate = useNavigate()
   const [recentJobs, setRecentJobs] = useState([])
   const [loadingJobs, setLoadingJobs] = useState(true)
@@ -128,9 +132,18 @@ const DashboardHome = ({ shop, stats, refreshStats, socket, onOpenEditModal }) =
 
   useEffect(() => {
     fetchRecentJobs()
-  }, [fetchRecentJobs])
+  }, [fetchRecentJobs, refreshTrigger])
 
-  // Socket listener for new jobs
+  // Periodic polling fallback (every 6 seconds) so updates are always 100% automated
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchRecentJobs()
+      refreshStats()
+    }, 6000)
+    return () => clearInterval(interval)
+  }, [fetchRecentJobs, refreshStats])
+
+  // Socket listener for new jobs, payments, and status changes
   useEffect(() => {
     if (!socket) return
     const handleUpdate = () => {
@@ -138,7 +151,15 @@ const DashboardHome = ({ shop, stats, refreshStats, socket, onOpenEditModal }) =
       refreshStats()
     }
     socket.on('new-job', handleUpdate)
-    return () => socket.off('new-job', handleUpdate)
+    socket.on('payment-received', handleUpdate)
+    socket.on('job-updated', handleUpdate)
+    socket.on('job-files-deleted', handleUpdate)
+    return () => {
+      socket.off('new-job', handleUpdate)
+      socket.off('payment-received', handleUpdate)
+      socket.off('job-updated', handleUpdate)
+      socket.off('job-files-deleted', handleUpdate)
+    }
   }, [socket, fetchRecentJobs, refreshStats])
 
   const handleJobAction = async (jobId, action) => {
@@ -432,14 +453,15 @@ const DashboardHome = ({ shop, stats, refreshStats, socket, onOpenEditModal }) =
 }
 
 // ── Print Queue ────────────────────────────────────────────────
-const PrintQueue = ({ shop, socket }) => {
+const PrintQueue = ({ shop, socket, refreshTrigger }) => {
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('all') // Default to 'all' so shopkeeper sees everything
+  const [smartPrintJob, setSmartPrintJob] = useState(null)
 
-  const fetchJobs = useCallback(async () => {
+  const fetchJobs = useCallback(async (isSilent = false) => {
     if (!shop?._id) return
-    setLoading(true)
+    if (!isSilent) setLoading(true)
     try {
       const statusMap = {
         all: '',
@@ -458,24 +480,30 @@ const PrintQueue = ({ shop, socket }) => {
     }
   }, [shop, activeTab])
 
-  useEffect(() => { fetchJobs() }, [fetchJobs])
+  useEffect(() => { fetchJobs() }, [fetchJobs, refreshTrigger])
+
+  // Periodic polling fallback (every 5 seconds) so queue is always 100% real-time
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchJobs(true)
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [fetchJobs])
 
   useEffect(() => {
     if (!socket) return
-    socket.on('new-job', () => {
-      fetchJobs()
-      toast.success('📄 New print job received in queue!', { duration: 4000 })
-    })
-    socket.on('job-updated', () => {
-      fetchJobs()
-    })
-    socket.on('job-files-deleted', () => {
-      fetchJobs()
-    })
+    const handleUpdate = () => {
+      fetchJobs(true)
+    }
+    socket.on('new-job', handleUpdate)
+    socket.on('payment-received', handleUpdate)
+    socket.on('job-updated', handleUpdate)
+    socket.on('job-files-deleted', handleUpdate)
     return () => {
-      socket.off('new-job')
-      socket.off('job-updated')
-      socket.off('job-files-deleted')
+      socket.off('new-job', handleUpdate)
+      socket.off('payment-received', handleUpdate)
+      socket.off('job-updated', handleUpdate)
+      socket.off('job-files-deleted', handleUpdate)
     }
   }, [socket, fetchJobs])
 
@@ -487,6 +515,15 @@ const PrintQueue = ({ shop, socket }) => {
     } catch (err) {
       toast.error(err.response?.data?.message || 'Action failed')
     }
+  }
+
+  const handleJobAction = (target, action) => {
+    if (action === 'smart-print') {
+      setSmartPrintJob(target)
+      return
+    }
+    const jobId = typeof target === 'object' ? target._id : target
+    updateJobStatus(jobId, action)
   }
 
   const tabs = [
@@ -573,9 +610,22 @@ const PrintQueue = ({ shop, socket }) => {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
           {jobs.map(job => (
-            <JobCard key={job._id} job={job} onAction={updateJobStatus} />
+            <JobCard key={job._id} job={job} onAction={handleJobAction} />
           ))}
         </div>
+      )}
+
+      {/* Smart Physical Print Dialog */}
+      {smartPrintJob && (
+        <SmartPrintModal
+          job={smartPrintJob}
+          socket={socket}
+          onClose={() => setSmartPrintJob(null)}
+          onJobUpdated={(jobId, action) => {
+            updateJobStatus(jobId, action)
+            fetchJobs(true)
+          }}
+        />
       )}
     </div>
   )
@@ -686,12 +736,12 @@ const JobCard = ({ job, onAction }) => {
       {/* Actions */}
       <div className="job-actions">
         {job.status === 'READY' && (
-          <button id={`print-now-${job._id}`} className="btn btn-primary" style={{ flex: 1, gap: 8, fontWeight: 700 }} onClick={() => onAction(job._id, 'print')}>
+          <button id={`print-now-${job._id}`} className="btn btn-primary" style={{ flex: 1, gap: 8, fontWeight: 700 }} onClick={() => onAction(job, 'smart-print')}>
             <PrinterIcon size={18} /> PRINT NOW
           </button>
         )}
         {job.status === 'RECEIVED' && (
-          <button id={`print-${job._id}`} className="btn btn-primary" style={{ flex: 1, gap: 8, fontWeight: 700 }} onClick={() => onAction(job._id, 'print')}>
+          <button id={`print-${job._id}`} className="btn btn-primary" style={{ flex: 1, gap: 8, fontWeight: 700 }} onClick={() => onAction(job, 'smart-print')}>
             <PrinterIcon size={18} /> Start Printing
           </button>
         )}
@@ -965,17 +1015,49 @@ const QRManagement = ({ shop }) => {
 
 
 // ── Job History ────────────────────────────────────────────────
-const JobHistory = ({ shop }) => {
+const JobHistory = ({ shop, socket, refreshTrigger }) => {
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  const fetchJobs = useCallback(async (isSilent = false) => {
     if (!shop?._id) return
-    api.get(`/shops/${shop._id}/jobs?status=COMPLETED&limit=50`)
-      .then(res => setJobs(res.data.data || []))
-      .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [shop])
+    if (!isSilent) setLoading(true)
+    try {
+      const res = await api.get(`/shops/${shop._id}/jobs?status=COMPLETED&limit=50`)
+      setJobs(res.data.data || [])
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [shop?._id])
+
+  useEffect(() => {
+    fetchJobs()
+  }, [fetchJobs, refreshTrigger])
+
+  // Periodic polling fallback (every 8 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchJobs(true)
+    }, 8000)
+    return () => clearInterval(interval)
+  }, [fetchJobs])
+
+  useEffect(() => {
+    if (!socket) return
+    const handleUpdate = () => {
+      fetchJobs(true)
+    }
+    socket.on('job-updated', handleUpdate)
+    socket.on('payment-received', handleUpdate)
+    socket.on('job-files-deleted', handleUpdate)
+    return () => {
+      socket.off('job-updated', handleUpdate)
+      socket.off('payment-received', handleUpdate)
+      socket.off('job-files-deleted', handleUpdate)
+    }
+  }, [socket, fetchJobs])
 
   return (
     <div className="animate-fadeIn">
@@ -1062,13 +1144,74 @@ const ShopDashboard = () => {
     } catch {}
   }, [shop])
 
-  useEffect(() => { fetchStats() }, [fetchStats])
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
-  // Listen for new jobs to update stats
+  // Listen for real-time events to update stats, show top notifications, and trigger auto-refresh
   useEffect(() => {
     if (!socket) return
-    socket.on('new-job', fetchStats)
-    return () => socket.off('new-job', fetchStats)
+
+    const onNewJob = (data) => {
+      fetchStats()
+      setRefreshTrigger(t => t + 1)
+      showTopAlert({
+        type: 'new-job',
+        icon: '📄',
+        title: `New Print Job #${data.jobNumber || ''}!`,
+        subtitle: `${data.customerName || 'Customer'} · ${data.totalFiles || 1} file(s) (${data.totalPages || 1} pgs) · ₹${data.estimatedPrice || ''}`,
+        duration: 6500
+      })
+    }
+
+    const onPaymentReceived = (data) => {
+      fetchStats()
+      setRefreshTrigger(t => t + 1)
+      showTopAlert({
+        type: 'payment',
+        icon: '💰',
+        title: `Payment Received: ₹${data.amount || ''}!`,
+        subtitle: `Job #${data.jobNumber || ''} (${data.customerName || 'Customer'}) · 10-sec cleanup started`,
+        duration: 6500
+      })
+    }
+
+    const onJobUpdated = (data) => {
+      fetchStats()
+      setRefreshTrigger(t => t + 1)
+      if (data?.paymentStatus === 'PAID' && data?.amount) {
+        showTopAlert({
+          type: 'payment',
+          icon: '💰',
+          title: `Payment Verified: ₹${data.amount}!`,
+          subtitle: `Job #${data.jobNumber || ''} (${data.customerName || 'Customer'})`,
+          duration: 5000
+        })
+      }
+    }
+
+    const onJobFilesDeleted = (data) => {
+      fetchStats()
+      setRefreshTrigger(t => t + 1)
+      showTopAlert({
+        type: 'deletion',
+        icon: '🛡️',
+        title: 'Files Permanently Deleted',
+        subtitle: `Job #${data?.jobNumber || ''} documents erased from counter storage.`,
+        duration: 4000,
+        playSound: false
+      })
+    }
+
+    socket.on('new-job', onNewJob)
+    socket.on('payment-received', onPaymentReceived)
+    socket.on('job-updated', onJobUpdated)
+    socket.on('job-files-deleted', onJobFilesDeleted)
+
+    return () => {
+      socket.off('new-job', onNewJob)
+      socket.off('payment-received', onPaymentReceived)
+      socket.off('job-updated', onJobUpdated)
+      socket.off('job-files-deleted', onJobFilesDeleted)
+    }
   }, [socket, fetchStats])
 
   // 1. If new admin/shopkeeper hasn't completed initial setup, show setup page first
@@ -1138,15 +1281,17 @@ const ShopDashboard = () => {
         {/* Content area */}
         <div className="dashboard-content">
           <Routes>
-            <Route index element={<DashboardHome shop={shop} stats={stats} refreshStats={fetchStats} socket={socket} onOpenEditModal={() => setEditModalOpen(true)} />} />
-            <Route path="queue" element={<PrintQueue shop={shop} socket={socket} />} />
+            <Route index element={<DashboardHome shop={shop} stats={stats} refreshStats={fetchStats} socket={socket} refreshTrigger={refreshTrigger} onOpenEditModal={() => setEditModalOpen(true)} />} />
+            <Route path="queue" element={<PrintQueue shop={shop} socket={socket} refreshTrigger={refreshTrigger} />} />
+            <Route path="printers" element={<PrinterManagement shop={shop} socket={socket} refreshTrigger={refreshTrigger} />} />
             <Route path="qr" element={<QRManagement shop={shop} />} />
-            <Route path="history" element={<JobHistory shop={shop} />} />
-            <Route path="dashboard" element={<DashboardHome shop={shop} stats={stats} refreshStats={fetchStats} socket={socket} onOpenEditModal={() => setEditModalOpen(true)} />} />
-            <Route path="dashboard/queue" element={<PrintQueue shop={shop} socket={socket} />} />
+            <Route path="history" element={<JobHistory shop={shop} socket={socket} refreshTrigger={refreshTrigger} />} />
+            <Route path="dashboard" element={<DashboardHome shop={shop} stats={stats} refreshStats={fetchStats} socket={socket} refreshTrigger={refreshTrigger} onOpenEditModal={() => setEditModalOpen(true)} />} />
+            <Route path="dashboard/queue" element={<PrintQueue shop={shop} socket={socket} refreshTrigger={refreshTrigger} />} />
+            <Route path="dashboard/printers" element={<PrinterManagement shop={shop} socket={socket} refreshTrigger={refreshTrigger} />} />
             <Route path="dashboard/qr" element={<QRManagement shop={shop} />} />
-            <Route path="dashboard/history" element={<JobHistory shop={shop} />} />
-            <Route path="*" element={<DashboardHome shop={shop} stats={stats} refreshStats={fetchStats} socket={socket} onOpenEditModal={() => setEditModalOpen(true)} />} />
+            <Route path="dashboard/history" element={<JobHistory shop={shop} socket={socket} refreshTrigger={refreshTrigger} />} />
+            <Route path="*" element={<DashboardHome shop={shop} stats={stats} refreshStats={fetchStats} socket={socket} refreshTrigger={refreshTrigger} onOpenEditModal={() => setEditModalOpen(true)} />} />
           </Routes>
         </div>
       </div>
@@ -1160,6 +1305,10 @@ const ShopDashboard = () => {
         <NavLink to="/shop/dashboard/queue" className={({ isActive }) => isActive ? 'active' : ''}>
           <div className="nav-dot"><PrinterIcon size={20} /></div>
           <span>Queue</span>
+        </NavLink>
+        <NavLink to="/shop/dashboard/printers" className={({ isActive }) => isActive ? 'active' : ''}>
+          <div className="nav-dot"><Laptop size={20} /></div>
+          <span>Printers</span>
         </NavLink>
         <NavLink to="/shop/dashboard/qr" className={({ isActive }) => isActive ? 'active' : ''}>
           <div className="nav-dot"><QrCode size={20} /></div>
