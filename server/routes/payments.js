@@ -174,23 +174,26 @@ router.post('/verify', async (req, res, next) => {
     const secret = process.env.RAZORPAY_KEY_SECRET || 'secureprint_dev_secret_2026';
     const rzp = getRazorpayInstance();
 
-    // Verify cryptographic signature
-    if (razorpay_signature && razorpay_order_id && razorpay_payment_id) {
-      const generatedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-        .digest('hex');
+    const isCounterCash = razorpay_signature === 'verified_counter_cash' || req.body.paymentMethod === 'CASH';
+    const isSandboxSimulation = !rzp && ['verified_server', 'simulated_test_signature', 'verified_counter_cash'].includes(razorpay_signature);
 
-      // Reject if signature does not match (unless explicitly using the internal dev simulation marker)
-      const isSimulationBypass = !rzp && razorpay_signature === 'simulated_test_signature';
-      if (generatedSignature !== razorpay_signature && !isSimulationBypass) {
-        console.error('[PAYMENT VERIFICATION FAILED] Signature mismatch for Job:', jobId);
-        job.paymentStatus = 'FAILED';
-        await job.save();
-        return res.status(400).json({
-          success: false,
-          message: 'Payment verification failed: invalid signature.'
-        });
+    // Verify cryptographic signature if not cash and not simulation
+    if (!isCounterCash && !isSandboxSimulation) {
+      if (razorpay_signature && razorpay_order_id && razorpay_payment_id) {
+        const generatedSignature = crypto
+          .createHmac('sha256', secret)
+          .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+          .digest('hex');
+
+        if (generatedSignature !== razorpay_signature) {
+          console.error('[PAYMENT VERIFICATION FAILED] Signature mismatch for Job:', jobId);
+          job.paymentStatus = 'FAILED';
+          await job.save();
+          return res.status(400).json({
+            success: false,
+            message: 'Payment verification failed: invalid signature.'
+          });
+        }
       }
     }
 
@@ -199,9 +202,10 @@ router.post('/verify', async (req, res, next) => {
     const payment = await Payment.findOneAndUpdate(
       { jobId: job._id },
       {
+        gateway: isCounterCash ? 'CASH' : (rzp ? 'RAZORPAY' : 'DIRECT_UPI'),
         gatewayOrderId: razorpay_order_id || `order_${job._id}`,
         gatewayPaymentId: razorpay_payment_id || `pay_${Date.now()}`,
-        gatewaySignature: razorpay_signature || 'verified_server',
+        gatewaySignature: razorpay_signature || (isCounterCash ? 'verified_counter_cash' : 'verified_server'),
         paymentStatus: 'PAID',
         paidAt
       },
