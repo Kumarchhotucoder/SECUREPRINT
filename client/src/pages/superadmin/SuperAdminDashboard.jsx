@@ -100,8 +100,8 @@ const CreateShopModal = ({ onClose, onCreated }) => {
   )
 
   return (
-    <div style={overlayStyle}>
-      <div style={{ ...modalStyle, maxWidth: 560 }}>
+    <div className="admin-modal-overlay">
+      <div className="admin-modal" style={{ maxWidth: 560 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-5)' }}>
           <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Plus size={18} /> Create New Shop</h3>
           <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={20} /></button>
@@ -115,7 +115,7 @@ const CreateShopModal = ({ onClose, onCreated }) => {
               <label className="input-label">Shop Name *</label>
               <input className="input" value={form.shopName} onChange={e => set('shopName', e.target.value)} placeholder="ABC Digital Center" required />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
+            <div className="admin-modal-grid-2">
               <div className="input-group">
                 <label className="input-label">Phone</label>
                 <input className="input" value={form.shopPhone} onChange={e => set('shopPhone', e.target.value)} placeholder="+91-98765-43210" />
@@ -137,7 +137,7 @@ const CreateShopModal = ({ onClose, onCreated }) => {
               <label className="input-label">Shopkeeper Name</label>
               <input className="input" value={form.ownerName} onChange={e => set('ownerName', e.target.value)} placeholder="Rahul Sharma" />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
+            <div className="admin-modal-grid-2">
               <div className="input-group">
                 <label className="input-label">Login Email *</label>
                 <input className="input" type="email" value={form.ownerEmail} onChange={e => set('ownerEmail', e.target.value)} placeholder="shopkeeper@example.com" required />
@@ -188,8 +188,8 @@ const EditShopModal = ({ shop, onClose, onUpdated }) => {
   }
 
   return (
-    <div style={overlayStyle}>
-      <div style={{ ...modalStyle, maxWidth: 420 }}>
+    <div className="admin-modal-overlay">
+      <div className="admin-modal" style={{ maxWidth: 440 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-5)' }}>
           <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Edit2 size={18} /> Edit Shop</h3>
           <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={20} /></button>
@@ -212,7 +212,7 @@ const EditShopModal = ({ shop, onClose, onUpdated }) => {
               <option value="false">Inactive / Deactivated</option>
             </select>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
+          <div className="admin-modal-grid-2">
             <div className="input-group">
               <label className="input-label">B&W Rate (₹/page)</label>
               <input className="input" type="number" min={0} value={form.pricing_bw} onChange={e => set('pricing_bw', e.target.value)} />
@@ -252,8 +252,8 @@ const ResetPasswordModal = ({ user, onClose }) => {
   }
 
   return (
-    <div style={overlayStyle}>
-      <div style={{ ...modalStyle, maxWidth: 380 }}>
+    <div className="admin-modal-overlay">
+      <div className="admin-modal" style={{ maxWidth: 400 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-5)' }}>
           <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Key size={18} /> Reset Password</h3>
           <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={20} /></button>
@@ -278,8 +278,8 @@ const ResetPasswordModal = ({ user, onClose }) => {
 
 // ── Shop Detail Modal ────────────────────────────────────────────
 const ShopDetailModal = ({ shop, onClose }) => (
-  <div style={overlayStyle}>
-    <div style={{ ...modalStyle, maxWidth: 600, maxHeight: '90vh', overflowY: 'auto' }}>
+  <div className="admin-modal-overlay">
+    <div className="admin-modal" style={{ maxWidth: 620 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-5)' }}>
         <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Store size={18} /> {shop.name}</h3>
         <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={20} /></button>
@@ -480,46 +480,35 @@ const SuperAdminDashboard = () => {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
       {/* ── TOP NAV ── */}
-      <nav style={{
-        background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)',
-        padding: '0 var(--space-6)', display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between', height: 60, position: 'sticky', top: 0, zIndex: 100,
-        boxShadow: 'var(--shadow-sm)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-          <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-md)', background: 'linear-gradient(135deg, #1A56DB, #7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+      <nav className="admin-nav">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+          <div style={{ width: 34, height: 34, borderRadius: 'var(--radius-md)', background: 'linear-gradient(135deg, #1A56DB, #7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0 }}>
             <Shield size={18} />
           </div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 15 }}>SecurePrint</div>
-            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600 }}>SUPER ADMIN</div>
+            <div className="admin-nav-brand-title" style={{ fontWeight: 800, fontSize: 15, lineHeight: 1.1 }}>SecurePrint</div>
+            <div className="admin-nav-brand-sub" style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 700, letterSpacing: '0.05em' }}>SUPER ADMIN</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-          <span style={{ fontSize: 13, color: 'var(--color-text-secondary)', display: 'var(--show-name, flex)' }}>
+        <div className="admin-nav-user">
+          <span className="admin-user-name" title={user?.name}>
             {user?.name}
           </span>
-          <button className="btn btn-ghost btn-sm" onClick={fetchAnalytics}><RefreshCw size={15} /></button>
-          <button className="btn btn-ghost btn-sm" onClick={handleLogout}><LogOut size={15} /> <span>Logout</span></button>
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={fetchAnalytics} title="Refresh Dashboard"><RefreshCw size={15} /></button>
+          <button className="btn btn-ghost btn-sm admin-logout-btn" onClick={handleLogout} title="Logout"><LogOut size={15} /> <span>Logout</span></button>
         </div>
       </nav>
 
       {/* ── TABS ── */}
-      <div style={{
-        background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)',
-        padding: '0 var(--space-6)', display: 'flex', gap: 2, overflowX: 'auto'
-      }}>
+      <div className="admin-tabs-bar">
         {tabs.map(t => (
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id)}
+            className="admin-tab-btn"
             style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
               color: activeTab === t.id ? 'var(--color-primary)' : 'var(--color-text-secondary)',
               borderBottom: activeTab === t.id ? '2px solid var(--color-primary)' : '2px solid transparent',
-              transition: 'all 0.15s ease'
             }}
           >
             {t.icon} {t.label}
@@ -528,15 +517,15 @@ const SuperAdminDashboard = () => {
       </div>
 
       {/* ── CONTENT ── */}
-      <div style={{ maxWidth: 1400, margin: '0 auto', padding: 'var(--space-6) var(--space-4)' }}>
+      <div className="admin-content-container">
 
         {/* ═══════════════════ ANALYTICS TAB ═══════════════════ */}
         {activeTab === 'analytics' && (
           <div className="animate-fadeIn">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-6)' }}>
+            <div className="admin-page-header">
               <div>
-                <h1 style={{ fontSize: 'var(--font-size-2xl)', marginBottom: 4 }}>Platform Overview</h1>
-                <p style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}>Live SecurePrint network analytics</p>
+                <h1 style={{ marginBottom: 2 }}>Platform Overview</h1>
+                <p style={{ color: 'var(--color-text-secondary)' }}>Live SecurePrint network analytics</p>
               </div>
               <button className="btn btn-primary btn-sm" onClick={() => { setShowCreateShop(true) }}>
                 <Plus size={15} /> New Shop
@@ -621,15 +610,15 @@ const SuperAdminDashboard = () => {
         {/* ═══════════════════ SHOPS TAB ═══════════════════════ */}
         {activeTab === 'shops' && (
           <div className="animate-fadeIn">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-5)', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+            <div className="admin-page-header">
               <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Store size={20} /> Shop Management</h2>
-              <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-                <div style={{ position: 'relative' }}>
+              <div className="admin-search-wrapper">
+                <div className="admin-search-container" style={{ position: 'relative' }}>
                   <Search size={16} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
-                  <input className="input" placeholder="Search shops..." value={shopSearch} onChange={e => setShopSearch(e.target.value)}
+                  <input className="input admin-search-input" placeholder="Search shops..." value={shopSearch} onChange={e => setShopSearch(e.target.value)}
                     style={{ paddingLeft: 34, width: 220 }} />
                 </div>
-                <button className="btn btn-ghost btn-sm" onClick={fetchShops}><RefreshCw size={14} /></button>
+                <button className="btn btn-ghost btn-sm btn-icon" onClick={fetchShops} title="Refresh"><RefreshCw size={14} /></button>
                 <button className="btn btn-primary btn-sm" onClick={() => setShowCreateShop(true)}><Plus size={14} /> Add Shop</button>
               </div>
             </div>
@@ -638,7 +627,7 @@ const SuperAdminDashboard = () => {
               <div className="loading-screen"><div className="spinner spinner-primary" style={{ width: 36, height: 36 }} /><p>Loading shops...</p></div>
             ) : (
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div style={{ overflowX: 'auto' }}>
+                <div className="admin-table-wrapper">
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: 'var(--color-bg)' }}>
@@ -702,10 +691,10 @@ const SuperAdminDashboard = () => {
         {/* ═══════════════════ USERS TAB ═══════════════════════ */}
         {activeTab === 'users' && (
           <div className="animate-fadeIn">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-5)', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+            <div className="admin-page-header">
               <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Users size={20} /> Shopkeeper Accounts</h2>
-              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                <button className="btn btn-ghost btn-sm" onClick={fetchUsers}><RefreshCw size={14} /></button>
+              <div className="admin-search-wrapper">
+                <button className="btn btn-ghost btn-sm btn-icon" onClick={fetchUsers} title="Refresh"><RefreshCw size={14} /></button>
                 <button className="btn btn-primary btn-sm" onClick={() => setShowCreateShop(true)}><UserPlus size={14} /> Add Shop + Shopkeeper</button>
               </div>
             </div>
@@ -714,7 +703,7 @@ const SuperAdminDashboard = () => {
               <div className="loading-screen"><div className="spinner spinner-primary" style={{ width: 36, height: 36 }} /></div>
             ) : (
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div style={{ overflowX: 'auto' }}>
+                <div className="admin-table-wrapper">
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: 'var(--color-bg)' }}>
@@ -762,15 +751,17 @@ const SuperAdminDashboard = () => {
         {/* ═══════════════════ CUSTOMERS TAB ═══════════════════ */}
         {activeTab === 'customers' && (
           <div className="animate-fadeIn">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-5)', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+            <div className="admin-page-header">
               <div>
                 <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Activity size={20} /> Customer Sessions</h2>
                 <p style={{ color: 'var(--color-text-muted)', fontSize: 12, marginTop: 2 }}>Metadata only — no document contents accessible here</p>
               </div>
-              <div style={{ position: 'relative' }}>
-                <Search size={16} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
-                <input className="input" placeholder="Search by customer name..." value={customerSearch}
-                  onChange={e => setCustomerSearch(e.target.value)} style={{ paddingLeft: 34, width: 240 }} />
+              <div className="admin-search-wrapper">
+                <div className="admin-search-container" style={{ position: 'relative' }}>
+                  <Search size={16} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+                  <input className="input admin-search-input" placeholder="Search by customer name..." value={customerSearch}
+                    onChange={e => setCustomerSearch(e.target.value)} style={{ paddingLeft: 34, width: 220 }} />
+                </div>
               </div>
             </div>
 
@@ -778,7 +769,7 @@ const SuperAdminDashboard = () => {
               <div className="loading-screen"><div className="spinner spinner-primary" style={{ width: 36, height: 36 }} /></div>
             ) : (
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div style={{ overflowX: 'auto' }}>
+                <div className="admin-table-wrapper">
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: 'var(--color-bg)' }}>
@@ -820,7 +811,7 @@ const SuperAdminDashboard = () => {
         {/* ═══════════════════ AUDIT TAB ═══════════════════════ */}
         {activeTab === 'audit' && (
           <div className="animate-fadeIn">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-5)' }}>
+            <div className="admin-page-header">
               <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Lock size={20} /> Security Audit Log</h2>
               <button className="btn btn-ghost btn-sm" onClick={fetchAudit}><RefreshCw size={14} /> Refresh</button>
             </div>
@@ -828,7 +819,7 @@ const SuperAdminDashboard = () => {
               <div className="loading-screen"><div className="spinner spinner-primary" style={{ width: 36, height: 36 }} /></div>
             ) : (
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div style={{ overflowX: 'auto' }}>
+                <div className="admin-table-wrapper">
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: 'var(--color-bg)' }}>
