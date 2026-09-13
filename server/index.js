@@ -114,7 +114,7 @@ app.use((err, req, res, next) => {
   const status = err.statusCode || 500;
   res.status(status).json({
     success: false,
-    message: status === 500 ? 'An unexpected error occurred. Please try again.' : err.message
+    message: err.message || 'An unexpected error occurred. Please try again.'
   });
 });
 
