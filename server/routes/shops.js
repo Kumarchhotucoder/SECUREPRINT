@@ -9,43 +9,7 @@ const { generateSecureToken, hashToken } = require('../utils/crypto');
 const { logEvent, getRequestMeta } = require('../utils/audit');
 const { getTodayRangeIST } = require('../utils/timezone');
 
-// Helper to detect if a URL is a local address (not reachable from a mobile phone)
-const isLocalAddress = (url) => {
-  if (!url) return true;
-  return /^(https?:\/\/)?(localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/i.test(url);
-};
-
-// Canonical public base URL resolver
-// Priority: PUBLIC_APP_URL -> APP_BASE_URL -> CLIENT_URL -> request headers -> default
-const getAppBaseUrl = (req = null) => {
-  const configuredUrl = process.env.PUBLIC_APP_URL || process.env.APP_BASE_URL || process.env.CLIENT_URL;
-  let baseUrl = configuredUrl ? configuredUrl.trim().replace(/\/$/, '') : '';
-
-  // Production Safety Check:
-  // Before generating a production QR: verify configured public URL is https:// and NOT localhost/private IP
-  if (process.env.NODE_ENV === 'production') {
-    if (!baseUrl || !baseUrl.startsWith('https://') || isLocalAddress(baseUrl)) {
-      throw new Error('Invalid production QR configuration. Set PUBLIC_APP_URL to the live HTTPS domain.');
-    }
-    return baseUrl;
-  }
-
-  // If a public URL was configured in non-production, use it
-  if (baseUrl) {
-    return baseUrl;
-  }
-
-  // Check if request arrived through a public proxy or tunnel
-  if (req) {
-    const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
-    const host = req.headers['x-forwarded-host'] || req.get('host');
-    if (host && !isLocalAddress(host)) {
-      return `${proto}://${host}`;
-    }
-  }
-
-  return 'http://localhost:5173';
-};
+const { isLocalAddress, getAppBaseUrl } = require('../utils/url');
 
 // Helper to ensure permanent QR is generated and cached for this shop's slug
 const ensurePermanentQr = async (shop, req = null) => {

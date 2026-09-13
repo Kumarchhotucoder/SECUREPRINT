@@ -8,18 +8,14 @@ const PrintSession = require('../models/PrintSession');
 const AuditLog = require('../models/AuditLog');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const { logEvent, getRequestMeta } = require('../utils/audit');
+const { getAppBaseUrl } = require('../utils/url');
 
 // All admin routes require authentication + ADMIN or SUPER_ADMIN role
 router.use(authenticate, requireAdmin);
 
 // ── Helper: build shop QR ──────────────────────────────────────
-const getPublicBaseUrl = () => {
-  const url = (process.env.PUBLIC_APP_URL || process.env.APP_BASE_URL || process.env.CLIENT_URL || 'http://localhost:5173').trim().replace(/\/$/, '');
-  return url;
-};
-
-const generateShopQr = async (slug) => {
-  const base = getPublicBaseUrl();
+const generateShopQr = async (slug, req = null) => {
+  const base = getAppBaseUrl(req);
   const target = `${base}/shop/${slug}`;
   const dataUrl = await QRCode.toDataURL(target, {
     width: 500, margin: 2,

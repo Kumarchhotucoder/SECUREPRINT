@@ -722,23 +722,37 @@ const JobCard = ({ job, onAction }) => {
 
 // ── QR Management ──────────────────────────────────────────────
 const QRManagement = ({ shop }) => {
-  const [qrData, setQrData] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const [qrData, setQrData] = useState(() => {
+    if (shop?.permanentQrDataUrl) {
+      return {
+        qrDataUrl: shop.permanentQrDataUrl,
+        qrTargetUrl: shop.permanentQrTargetUrl || `${window.location.origin}/shop/${shop.slug}`
+      }
+    }
+    return null
+  })
+  const [loading, setLoading] = useState(!qrData)
+  const [fetchError, setFetchError] = useState(false)
 
   const fetchPermanentQR = async () => {
     if (!shop?._id) return
     setLoading(true)
+    setFetchError(false)
     try {
       const res = await api.get(`/shops/${shop._id}/permanent-qr`)
-      setQrData(res.data.data)
+      if (res.data?.data) {
+        setQrData(res.data.data)
+      }
     } catch {
       // Fallback to shop's own cached permanentQrDataUrl without window.location.origin
-      if (shop.permanentQrDataUrl) {
-        const target = shop.permanentQrTargetUrl || (import.meta.env.VITE_PUBLIC_APP_URL ? `${import.meta.env.VITE_PUBLIC_APP_URL}/shop/${shop.slug}` : `/shop/${shop.slug}`)
+      if (shop?.permanentQrDataUrl) {
+        const target = shop.permanentQrTargetUrl || (import.meta.env.VITE_PUBLIC_APP_URL ? `${import.meta.env.VITE_PUBLIC_APP_URL}/shop/${shop.slug}` : `${window.location.origin}/shop/${shop.slug}`)
         setQrData({
           qrDataUrl: shop.permanentQrDataUrl,
           qrTargetUrl: target
         })
+      } else {
+        setFetchError(true)
       }
     } finally {
       setLoading(false)
@@ -746,7 +760,9 @@ const QRManagement = ({ shop }) => {
   }
 
   useEffect(() => {
-    fetchPermanentQR()
+    if (shop?._id) {
+      fetchPermanentQR()
+    }
   }, [shop?._id])
 
   // Single source of truth for public QR destination
@@ -862,8 +878,20 @@ const QRManagement = ({ shop }) => {
           </>
         ) : (
           <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 'var(--space-8)' }}>
-            <div className="spinner spinner-primary" style={{ margin: '0 auto var(--space-4)' }} />
-            <p>Loading permanent counter QR...</p>
+            {fetchError ? (
+              <div>
+                <AlertCircle size={32} color="#EF4444" style={{ margin: '0 auto var(--space-2)' }} />
+                <p style={{ color: '#EF4444', fontWeight: 600, marginBottom: 'var(--space-3)' }}>Unable to load counter QR</p>
+                <button className="btn btn-secondary btn-sm" onClick={fetchPermanentQR}>
+                  🔄 Retry Loading QR
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div className="spinner spinner-primary" style={{ margin: '0 auto var(--space-4)' }} />
+                <p>Loading permanent counter QR...</p>
+              </div>
+            )}
           </div>
         )}
 

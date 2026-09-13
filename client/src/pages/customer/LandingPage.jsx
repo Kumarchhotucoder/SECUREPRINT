@@ -38,9 +38,8 @@ const LandingPage = () => {
     try {
       scanner = new Html5QrcodeScanner("reader", {
         fps: 10,
-        qrbox: { width: 220, height: 220 },
-        rememberLastUsedCamera: true,
-        supportedScanTypes: []
+        qrbox: { width: 250, height: 250 },
+        rememberLastUsedCamera: true
       }, false)
 
       const handleDecodedQR = (decodedText) => {

@@ -5,6 +5,7 @@ const { signAccessToken, signRefreshToken, verifyRefreshToken, hashRefreshToken 
 const { logEvent, getRequestMeta } = require('../utils/audit');
 const { authenticate } = require('../middleware/auth');
 const { authLimiter } = require('../middleware/rateLimiter');
+const { getAppBaseUrl } = require('../utils/url');
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 30 * 60 * 1000; // 30 minutes
@@ -192,7 +193,7 @@ router.post('/register-shop', async (req, res, next) => {
     await shop.save();
 
     // 3. Generate permanent QR
-    const publicBaseUrl = (process.env.PUBLIC_APP_URL || process.env.APP_BASE_URL || process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
+    const publicBaseUrl = getAppBaseUrl(req);
     const qrTarget = `${publicBaseUrl}/shop/${shop.slug}`;
     const qrDataUrl = await QRCode.toDataURL(qrTarget, {
       width: 500,
