@@ -5,17 +5,16 @@ import { Shield, Eye, EyeOff, Lock, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const SuperAdminLogin = () => {
-  const { login, user } = useAuth()
+  const { login, user, logout } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  // Already logged in
-  if (user) {
-    if (user.role === 'SUPER_ADMIN') return <Navigate to="/super-admin" replace />
-    return <Navigate to="/shop/dashboard" replace />
+  // Already logged in as SUPER_ADMIN
+  if (user && user.role === 'SUPER_ADMIN') {
+    return <Navigate to="/super-admin" replace />
   }
 
   const handleSubmit = async (e) => {
@@ -98,6 +97,30 @@ const SuperAdminLogin = () => {
           padding: 'var(--space-8)',
           boxShadow: '0 24px 64px rgba(0,0,0,0.4)'
         }}>
+          {/* Active non-super-admin session indicator */}
+          {user && user.role !== 'SUPER_ADMIN' && (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'rgba(239,68,68,0.15)',
+              border: '1px solid rgba(239,68,68,0.3)',
+              borderRadius: 'var(--radius-md)',
+              padding: '10px 14px',
+              marginBottom: 'var(--space-4)',
+              color: '#FCA5A5',
+              fontSize: 12, fontWeight: 600
+            }}>
+              <span>Active session: <strong>{user.name}</strong> ({user.role})</span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                style={{ color: '#FCA5A5', padding: '2px 8px', fontSize: 11, textDecoration: 'underline' }}
+                onClick={() => logout()}
+              >
+                Sign out first
+              </button>
+            </div>
+          )}
+
           {/* Warning badge */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: 8,

@@ -316,9 +316,11 @@ const StatusPage = () => {
   }
 
   const isPrintingDone = ['AWAITING_PAYMENT', 'PAYMENT_PROCESSING', 'PAID', 'CLEANUP_COUNTDOWN', 'COMPLETED'].includes(job?.status) || Boolean(job?.completedAt)
-  const isAwaitingPayment = (job?.status === 'AWAITING_PAYMENT' || isPrintingDone) && job?.paymentStatus !== 'PAID' && !job?.filesDeleted
   const isPaid = job?.paymentStatus === 'PAID'
   const isFilesDeleted = Boolean(job?.filesDeleted)
+  // Always display payment choices on mobile as long as the job is unpaid and files are not deleted
+  const shouldShowPayment = !isPaid && !isFilesDeleted
+  const isAwaitingPayment = (job?.status === 'AWAITING_PAYMENT' || isPrintingDone) && shouldShowPayment
   const isFailed = ['FAILED', 'CANCELLED', 'EXPIRED'].includes(job?.status)
 
   const payableAmount = job?.finalPrice != null ? job.finalPrice : job?.estimatedPrice || 10
@@ -331,7 +333,7 @@ const StatusPage = () => {
           ? 'linear-gradient(135deg, #059669 0%, #064E3B 100%)'
           : isPaid
             ? 'linear-gradient(135deg, #7C3AED 0%, #4C1D95 100%)'
-            : isAwaitingPayment
+            : isPrintingDone
               ? 'linear-gradient(135deg, #D97706 0%, #B45309 100%)'
               : 'linear-gradient(135deg, #1A56DB 0%, #1246B5 100%)',
         padding: 'var(--space-8) var(--space-4)',
@@ -348,9 +350,9 @@ const StatusPage = () => {
             ? '✓ Files Permanently Deleted'
             : isPaid
               ? '✓ Payment Successful'
-              : isAwaitingPayment
-                ? 'Payment Required'
-                : 'Printing Status'}
+              : isPrintingDone
+                ? 'Printing Completed · Pay Now'
+                : 'Choose Payment Method'}
         </h1>
         <p style={{ opacity: 0.9, fontSize: 'var(--font-size-sm)' }}>
           Job #{job?.jobNumber} · {job?.shopId?.name || 'SecurePrint Partner'}
@@ -358,26 +360,31 @@ const StatusPage = () => {
       </div>
 
       <div className="container" style={{ paddingTop: 'var(--space-6)', maxWidth: 540 }}>
-        {/* 1. PAYMENT REQUIRED BANNER & ACTION */}
-        {isAwaitingPayment && (
+        {/* 1. PAYMENT OPTIONS BANNER & ACTION (Always visible until paid) */}
+        {shouldShowPayment && (
           <div className="card animate-slideUp" style={{
             marginBottom: 'var(--space-6)',
-            border: '2px solid #F59E0B',
-            background: '#FFFBEB',
-            boxShadow: '0 10px 25px -5px rgba(245, 158, 11, 0.2)'
+            border: isPrintingDone ? '2px solid #F59E0B' : '2px solid #3B82F6',
+            background: isPrintingDone ? '#FFFBEB' : '#F8FAFC',
+            boxShadow: isPrintingDone ? '0 10px 25px -5px rgba(245, 158, 11, 0.2)' : '0 10px 25px -5px rgba(59, 130, 246, 0.15)'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
               <div style={{
                 width: 44, height: 44, borderRadius: 'var(--radius-full)',
-                background: '#FEF3C7', color: '#B45309',
+                background: isPrintingDone ? '#FEF3C7' : '#DBEAFE',
+                color: isPrintingDone ? '#B45309' : '#1D4ED8',
                 display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}>
-                <CheckCircle size={24} />
+                {isPrintingDone ? <CheckCircle size={24} /> : <Printer size={24} />}
               </div>
               <div>
-                <h3 style={{ fontSize: 'var(--font-size-lg)', color: '#92400E', margin: 0 }}>Printing Completed</h3>
-                <p style={{ fontSize: 'var(--font-size-sm)', color: '#B45309', margin: 0 }}>
-                  Your documents are ready. Please complete payment to the shop.
+                <h3 style={{ fontSize: 'var(--font-size-lg)', color: isPrintingDone ? '#92400E' : '#1E3A8A', margin: 0 }}>
+                  {isPrintingDone ? 'Printing Completed — Complete Payment' : 'Pay Online (UPI) or Cash at Counter'}
+                </h3>
+                <p style={{ fontSize: 'var(--font-size-sm)', color: isPrintingDone ? '#B45309' : '#1E40AF', margin: 0 }}>
+                  {isPrintingDone
+                    ? 'Your documents are ready. Please complete payment to the shop.'
+                    : 'Documents received by shop counter. Choose online UPI or cash payment.'}
                 </p>
               </div>
             </div>

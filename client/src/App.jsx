@@ -22,9 +22,9 @@ const ProtectedRoute = ({ children, role }) => {
   if (!user) {
     return <Navigate to={role === 'SUPER_ADMIN' ? '/super-admin/login' : '/shop/login'} replace />
   }
-  // Super admin must go to their dashboard
+  // Super admin route requires SUPER_ADMIN role
   if (role === 'SUPER_ADMIN' && user.role !== 'SUPER_ADMIN') {
-    return <Navigate to="/shop/dashboard" replace />
+    return <Navigate to="/super-admin/login" replace />
   }
   // Shopkeeper route — allow SHOPKEEPER, ADMIN, SUPER_ADMIN
   if (role === 'SHOPKEEPER' && !['SHOPKEEPER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {

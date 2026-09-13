@@ -72,6 +72,14 @@ api.interceptors.response.use(
         isRefreshing = false
       }
     }
+    // If 403 Forbidden on an admin route or while viewing /super-admin, session lacks Super Admin role
+    if (error.response?.status === 403 && (error.config?.url?.includes('/admin') || window.location.pathname.startsWith('/super-admin'))) {
+      localStorage.removeItem('accessToken')
+      localStorage.removeItem('refreshToken')
+      window.location.href = '/super-admin/login'
+      return Promise.reject(error)
+    }
+
     return Promise.reject(error)
   }
 )
