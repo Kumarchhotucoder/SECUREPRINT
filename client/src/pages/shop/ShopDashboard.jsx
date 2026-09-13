@@ -498,35 +498,42 @@ const PrintQueue = ({ shop, socket }) => {
   ]
 
   return (
-    <div className="animate-fadeIn">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-6)', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
-        <div>
-          <h2>Print Queue</h2>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+    <div className="animate-fadeIn" style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <h2 style={{ fontSize: 'var(--font-size-xl)' }}>Print Queue</h2>
+          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-xs)' }}>
             Real-time incoming print requests from counter scans.
           </p>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={fetchJobs}>
-          <RefreshCw size={16} /> Refresh
+        <button className="btn btn-ghost btn-sm" onClick={fetchJobs} style={{ flexShrink: 0 }}>
+          <RefreshCw size={15} /> Refresh
         </button>
       </div>
 
       {/* Tabs */}
-      <div style={{
+      <div className="queue-tab-bar" style={{
         display: 'flex', gap: 'var(--space-1)',
         background: 'var(--color-surface-2)',
         borderRadius: 'var(--radius-lg)',
         padding: 4,
-        marginBottom: 'var(--space-6)',
-        overflowX: 'auto'
+        marginBottom: 'var(--space-4)',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
+        width: '100%',
+        maxWidth: '100%',
+        boxSizing: 'border-box'
       }}>
         {tabs.map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
+            className="queue-tab"
             style={{
-              flex: 1,
-              padding: '10px var(--space-3)',
+              flex: '0 0 auto',
+              padding: '8px 14px',
               border: 'none',
               borderRadius: 'var(--radius-md)',
               fontWeight: 600,
@@ -547,15 +554,24 @@ const PrintQueue = ({ shop, socket }) => {
       {loading ? (
         <div className="loading-screen" style={{ minHeight: 200 }}><div className="spinner spinner-primary" /></div>
       ) : jobs.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: 'var(--space-12)', color: 'var(--color-text-muted)' }}>
-          <PrinterIcon size={52} style={{ margin: '0 auto var(--space-4)', opacity: 0.25 }} />
-          <h3 style={{ color: 'var(--color-text)', marginBottom: 'var(--space-1)' }}>No {activeTab !== 'all' ? activeTab : ''} print jobs found</h3>
-          <p style={{ fontSize: 'var(--font-size-sm)', maxWidth: 360, margin: '0 auto var(--space-4)' }}>
+        <div className="card" style={{
+          textAlign: 'center',
+          padding: 'var(--space-8) var(--space-4)',
+          color: 'var(--color-text-muted)',
+          width: '100%',
+          maxWidth: '100%',
+          boxSizing: 'border-box'
+        }}>
+          <PrinterIcon size={48} style={{ margin: '0 auto var(--space-3)', opacity: 0.25 }} />
+          <h3 style={{ color: 'var(--color-text)', marginBottom: 'var(--space-1)', fontSize: 'var(--font-size-lg)' }}>
+            No {activeTab !== 'all' ? activeTab : ''} print jobs found
+          </h3>
+          <p style={{ fontSize: 'var(--font-size-sm)', maxWidth: 340, margin: '0 auto', wordBreak: 'break-word', lineHeight: 1.5 }}>
             When customers scan your counter QR code and submit documents, their jobs appear right here in real time.
           </p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
           {jobs.map(job => (
             <JobCard key={job._id} job={job} onAction={updateJobStatus} />
           ))}
@@ -1079,30 +1095,40 @@ const ShopDashboard = () => {
       <div className="dashboard-main">
         {/* Top bar */}
         <div className="dashboard-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', minWidth: 0, overflow: 'hidden' }}>
             <button
               className="btn btn-ghost btn-icon"
               id="sidebar-toggle"
               onClick={() => setSidebarOpen(o => !o)}
               aria-label="Toggle navigation"
+              style={{ flexShrink: 0, padding: 8 }}
             >
               <Menu size={20} />
             </button>
-            <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700 }}>{pageTitle()}</h3>
+            <h3 style={{
+              fontSize: 'var(--font-size-base)',
+              fontWeight: 700,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}>
+              {pageTitle()}
+            </h3>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            {/* Edit button — hidden on mobile, accessible from sidebar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexShrink: 0 }}>
+            {/* Edit button — compact on mobile */}
             <button
               id="header-edit-rates-btn"
               className="btn btn-secondary btn-sm"
-              style={{ alignItems: 'center', gap: 6, fontWeight: 700 }}
+              style={{ alignItems: 'center', gap: 6, fontWeight: 700, padding: '6px 10px' }}
               onClick={() => setEditModalOpen(true)}
+              title="Edit Rates"
             >
-              ✏️ <span style={{ display: 'var(--header-btn-label, inline)' }}>Edit Rates</span>
+              ✏️ <span className="desktop-only">Edit Rates</span>
             </button>
 
             {shop?.verificationStatus === 'VERIFIED' && (
-              <span className="badge badge-verified" style={{ display: 'var(--verified-badge, inline-flex)' }}>
+              <span className="badge badge-verified desktop-only">
                 <CheckCircle size={10} /> <span>Verified</span>
               </span>
             )}
