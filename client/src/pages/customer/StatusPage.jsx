@@ -3,8 +3,10 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { io } from 'socket.io-client'
 import {
   Shield, CheckCircle, Clock, Printer, Trash2,
-  AlertCircle, Receipt, CreditCard, Sparkles, Lock, Banknote
+  AlertCircle, Receipt, CreditCard, Sparkles, Lock, Banknote,
+  QrCode, Smartphone, ArrowRight, Copy, Check
 } from 'lucide-react'
+import QRCode from 'qrcode'
 import toast from 'react-hot-toast'
 import api from '../../lib/api'
 
@@ -37,6 +39,9 @@ const StatusPage = () => {
   const [paying, setPaying] = useState(false)
   const [payingCash, setPayingCash] = useState(false)
   const [countdown, setCountdown] = useState(null)
+  const [paymentTab, setPaymentTab] = useState('ONLINE') // 'ONLINE' | 'CASH'
+  const [upiQrUrl, setUpiQrUrl] = useState('')
+  const [copiedUpi, setCopiedUpi] = useState(false)
 
   // Fetch initial job details
   useEffect(() => {
@@ -54,6 +59,18 @@ const StatusPage = () => {
     }
     fetchJob()
   }, [jobId, sessionToken])
+
+  // Generate dynamic UPI QR code
+  useEffect(() => {
+    const amt = job?.finalPrice != null ? job.finalPrice : (job?.estimatedPrice || 2)
+    const shopName = job?.shopId?.name || 'SecurePrint Counter'
+    const upiStr = `upi://pay?pa=secureprint@upi&pn=${encodeURIComponent(shopName)}&am=${amt}&cu=INR&tn=Job_${job?.jobNumber || 'Print'}`
+    QRCode.toDataURL(upiStr, {
+      width: 240,
+      margin: 2,
+      color: { dark: '#0F172A', light: '#FFFFFF' }
+    }).then(setUpiQrUrl).catch(() => {})
+  }, [job?.finalPrice, job?.estimatedPrice, job?.jobNumber, job?.shopId?.name])
 
   // Real-time Socket.IO synchronization
   useEffect(() => {
@@ -383,66 +400,273 @@ const StatusPage = () => {
               </span>
             </div>
 
-            {/* Dual Payment Options: Online & Cash */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-              {/* Option 1: Pay Online */}
+            {/* Payment Method Selector Tabs */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
               <button
-                id="pay-online-btn"
-                className="btn btn-primary btn-lg w-full"
+                type="button"
+                className="btn"
                 style={{
-                  height: 52,
-                  fontSize: 'var(--font-size-base)',
-                  fontWeight: 800,
-                  background: 'linear-gradient(135deg, #1A56DB 0%, #1E40AF 100%)',
-                  boxShadow: '0 4px 14px 0 rgba(26, 86, 219, 0.35)',
+                  background: paymentTab === 'ONLINE' ? '#1A56DB' : '#F1F5F9',
+                  color: paymentTab === 'ONLINE' ? 'white' : '#475569',
+                  border: paymentTab === 'ONLINE' ? 'none' : '1px solid #CBD5E1',
+                  fontWeight: 700,
+                  fontSize: 'var(--font-size-sm)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 10
+                  gap: 6,
+                  height: 46
                 }}
-                disabled={paying || payingCash}
-                onClick={handlePayment}
+                onClick={() => setPaymentTab('ONLINE')}
               >
-                {paying ? (
-                  <><div className="spinner" /> Processing Online Payment...</>
-                ) : (
-                  <>
-                    <CreditCard size={20} />
-                    <span>Pay Online ₹{payableAmount} (UPI / Card / GPay)</span>
-                  </>
-                )}
+                <Smartphone size={16} /> Pay Online (UPI)
               </button>
 
-              {/* Option 2: Pay Cash at Counter */}
               <button
-                id="pay-cash-btn"
-                className="btn btn-secondary btn-lg w-full"
+                type="button"
+                className="btn"
                 style={{
-                  height: 52,
-                  fontSize: 'var(--font-size-base)',
-                  fontWeight: 800,
-                  borderColor: '#059669',
-                  color: '#047857',
-                  background: '#ECFDF5',
-                  boxShadow: '0 4px 14px 0 rgba(5, 150, 105, 0.15)',
+                  background: paymentTab === 'CASH' ? '#059669' : '#F1F5F9',
+                  color: paymentTab === 'CASH' ? 'white' : '#475569',
+                  border: paymentTab === 'CASH' ? 'none' : '1px solid #CBD5E1',
+                  fontWeight: 700,
+                  fontSize: 'var(--font-size-sm)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 10
+                  gap: 6,
+                  height: 46
                 }}
-                disabled={paying || payingCash}
-                onClick={handleCashPayment}
+                onClick={() => setPaymentTab('CASH')}
               >
-                {payingCash ? (
-                  <><div className="spinner" /> Confirming Cash...</>
-                ) : (
-                  <>
-                    <Banknote size={20} />
-                    <span>Pay Cash at Counter ₹{payableAmount} (नकद दिया)</span>
-                  </>
-                )}
+                <Banknote size={16} /> Pay Cash at Counter
               </button>
             </div>
+
+            {/* TAB 1: ONLINE / UPI PAYMENT */}
+            {paymentTab === 'ONLINE' && (
+              <div className="animate-fadeIn">
+                {/* 1-Click Mobile UPI App Launchers */}
+                <div style={{ marginBottom: 'var(--space-4)' }}>
+                  <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 700, color: '#475569', marginBottom: 'var(--space-2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Tap to pay with your UPI app:
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--space-2)' }}>
+                    {/* Google Pay */}
+                    <a
+                      href={`upi://pay?pa=secureprint@upi&pn=${encodeURIComponent(job?.shopId?.name || 'SecurePrint')}&am=${payableAmount}&cu=INR&tn=Job_${job?.jobNumber || 'Print'}`}
+                      className="btn btn-secondary"
+                      style={{
+                        padding: '10px 6px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 4,
+                        border: '1.5px solid #E2E8F0',
+                        background: 'white',
+                        textDecoration: 'none',
+                        color: '#1E293B',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        borderRadius: 'var(--radius-lg)'
+                      }}
+                      onClick={() => toast.success('Opening Google Pay / UPI app...')}
+                    >
+                      <span style={{ fontSize: '1.25rem' }}>🔵</span>
+                      Google Pay
+                    </a>
+
+                    {/* PhonePe */}
+                    <a
+                      href={`phonepe://pay?pa=secureprint@upi&pn=${encodeURIComponent(job?.shopId?.name || 'SecurePrint')}&am=${payableAmount}&cu=INR&tn=Job_${job?.jobNumber || 'Print'}`}
+                      className="btn btn-secondary"
+                      style={{
+                        padding: '10px 6px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 4,
+                        border: '1.5px solid #5F259F',
+                        background: '#FAF5FF',
+                        textDecoration: 'none',
+                        color: '#5F259F',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        borderRadius: 'var(--radius-lg)'
+                      }}
+                      onClick={() => toast.success('Opening PhonePe...')}
+                    >
+                      <span style={{ fontSize: '1.25rem' }}>🟣</span>
+                      PhonePe
+                    </a>
+
+                    {/* Paytm */}
+                    <a
+                      href={`paytmmp://pay?pa=secureprint@upi&pn=${encodeURIComponent(job?.shopId?.name || 'SecurePrint')}&am=${payableAmount}&cu=INR&tn=Job_${job?.jobNumber || 'Print'}`}
+                      className="btn btn-secondary"
+                      style={{
+                        padding: '10px 6px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 4,
+                        border: '1.5px solid #00BAF2',
+                        background: '#F0F9FF',
+                        textDecoration: 'none',
+                        color: '#0369A1',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        borderRadius: 'var(--radius-lg)'
+                      }}
+                      onClick={() => toast.success('Opening Paytm...')}
+                    >
+                      <span style={{ fontSize: '1.25rem' }}>🔷</span>
+                      Paytm / UPI
+                    </a>
+                  </div>
+                </div>
+
+                {/* Scan UPI QR code */}
+                {upiQrUrl && (
+                  <div style={{
+                    background: 'white',
+                    borderRadius: 'var(--radius-xl)',
+                    padding: 'var(--space-4)',
+                    textAlign: 'center',
+                    border: '1px solid #E2E8F0',
+                    marginBottom: 'var(--space-4)'
+                  }}>
+                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-2)' }}>
+                      Scan this QR with any UPI App (GPay / PhonePe / Paytm):
+                    </div>
+                    <img
+                      src={upiQrUrl}
+                      alt="UPI Payment QR Code"
+                      style={{
+                        width: 170,
+                        height: 170,
+                        margin: '0 auto',
+                        display: 'block',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid #CBD5E1'
+                      }}
+                    />
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      marginTop: 'var(--space-2)',
+                      fontSize: '0.75rem',
+                      color: 'var(--color-text-secondary)'
+                    }}>
+                      <span>UPI ID: <strong>secureprint@upi</strong></span>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon"
+                        style={{ padding: 2, height: 'auto', width: 'auto' }}
+                        onClick={() => {
+                          navigator.clipboard.writeText('secureprint@upi')
+                          setCopiedUpi(true)
+                          toast.success('UPI ID copied!')
+                          setTimeout(() => setCopiedUpi(false), 2000)
+                        }}
+                      >
+                        {copiedUpi ? <Check size={12} color="#059669" /> : <Copy size={12} />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Confirm Online Payment Button */}
+                <button
+                  id="confirm-online-pay-btn"
+                  className="btn btn-primary btn-lg w-full"
+                  style={{
+                    height: 52,
+                    fontSize: 'var(--font-size-base)',
+                    fontWeight: 800,
+                    background: 'linear-gradient(135deg, #1A56DB 0%, #1E40AF 100%)',
+                    boxShadow: '0 4px 14px 0 rgba(26, 86, 219, 0.35)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10
+                  }}
+                  disabled={paying}
+                  onClick={handlePayment}
+                >
+                  {paying ? (
+                    <><div className="spinner" /> Verifying Online Payment...</>
+                  ) : (
+                    <>
+                      <CheckCircle size={20} />
+                      <span>✓ I Have Paid Online (Start 10s Cleanup)</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* TAB 2: CASH AT COUNTER */}
+            {paymentTab === 'CASH' && (
+              <div className="animate-fadeIn" style={{
+                background: '#ECFDF5',
+                border: '1.5px solid #10B981',
+                borderRadius: 'var(--radius-xl)',
+                padding: 'var(--space-5)',
+                textAlign: 'center'
+              }}>
+                <div style={{
+                  width: 56, height: 56, borderRadius: '50%',
+                  background: '#D1FAE5', color: '#047857',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  margin: '0 auto var(--space-3)'
+                }}>
+                  <Banknote size={32} />
+                </div>
+                <h4 style={{ color: '#065F46', margin: '0 0 var(--space-1)', fontSize: 'var(--font-size-lg)' }}>
+                  Pay ₹{payableAmount} in Cash
+                </h4>
+                <p style={{ color: '#047857', fontSize: 'var(--font-size-sm)', margin: '0 0 var(--space-4)' }}>
+                  Please hand over ₹{payableAmount} cash directly to the shopkeeper at the counter.
+                </p>
+
+                <button
+                  id="confirm-cash-btn"
+                  className="btn btn-success btn-lg w-full"
+                  style={{
+                    height: 52,
+                    fontSize: 'var(--font-size-base)',
+                    fontWeight: 800,
+                    background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                    boxShadow: '0 4px 14px 0 rgba(5, 150, 105, 0.35)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10
+                  }}
+                  disabled={payingCash}
+                  onClick={handleCashPayment}
+                >
+                  {payingCash ? (
+                    <><div className="spinner" /> Confirming Cash Payment...</>
+                  ) : (
+                    <>
+                      <Banknote size={20} />
+                      <span>💵 Confirm Cash Paid (नकद दे दिया)</span>
+                    </>
+                  )}
+                </button>
+
+                <div style={{ fontSize: 'var(--font-size-xs)', color: '#065F46', marginTop: 'var(--space-3)', opacity: 0.9 }}>
+                  💡 Shopkeeper can also confirm from their counter screen. Once confirmed, file deletion countdown begins immediately!
+                </div>
+              </div>
+            )}
 
             <div style={{ textAlign: 'center', marginTop: 'var(--space-4)', fontSize: 'var(--font-size-xs)', color: '#92400E', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
               <Lock size={12} /> Pay online or pay cash at shop counter. Files auto-delete in 10s after payment!
