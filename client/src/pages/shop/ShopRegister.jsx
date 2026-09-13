@@ -76,25 +76,17 @@ const ShopRegister = () => {
       toast.success('Shop registered successfully!')
 
       // 2. Automatically log in the user
-      await login(formData.email, formData.password)
-
-      // 3. If trial or paid, activate subscription
-      if (selectedPlan === 'TRIAL') {
-        await api.post('/subscriptions/activate-trial')
-        toast.success('Free 7-Day Trial activated! Your counter is live.')
-      } else {
-        await api.post('/subscriptions/verify', {
-          planId: selectedPlan,
-          razorpay_order_id: `sub_${Date.now()}`,
-          razorpay_payment_id: `sub_pay_${Date.now()}`,
-          razorpay_signature: 'verified_server'
-        })
-        toast.success('Subscription activated! Your permanent QR is ready.')
+      try {
+        await login(formData.email, formData.password)
+        navigate('/shop/dashboard', { replace: true })
+      } catch (loginErr) {
+        toast.success('Shop created successfully! Please sign in.')
+        navigate('/shop/login', { replace: true })
       }
-
-      navigate('/shop/dashboard', { replace: true })
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Registration failed. Please check your details.')
+      console.error('Registration error:', err)
+      const errorMsg = err.response?.data?.message || err.message || 'Registration failed. Please check your details.'
+      toast.error(errorMsg)
     } finally {
       setLoading(false)
     }

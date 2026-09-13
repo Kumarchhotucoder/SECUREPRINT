@@ -16,9 +16,9 @@ const seed = async () => {
 
   // 1. Create Super Admin
   const superAdmin = new User({
-    name: 'Master Platform Admin',
-    email: process.env.ADMIN_EMAIL || 'admin@secureprint.in',
-    passwordHash: process.env.ADMIN_PASSWORD || 'Admin@SecurePrint123!',
+    name: 'Chhotu Kumar (Master Admin)',
+    email: process.env.ADMIN_EMAIL || 'chhotu6826@gmail.com',
+    passwordHash: process.env.ADMIN_PASSWORD || '312130',
     role: 'SUPER_ADMIN'
   });
   await superAdmin.save();

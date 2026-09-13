@@ -148,7 +148,16 @@ router.post('/register-shop', async (req, res, next) => {
 
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
-      return res.status(409).json({ success: false, message: 'An account with this email already exists.' });
+      if (existingUser.role === 'SUPER_ADMIN') {
+        return res.status(400).json({
+          success: false,
+          message: 'This email belongs to the Platform Super Admin. Please sign in at /super-admin/login.'
+        });
+      }
+      return res.status(409).json({
+        success: false,
+        message: 'An account with this email already exists. Please sign in at /shop/login.'
+      });
     }
 
     // 1. Create shopkeeper user
