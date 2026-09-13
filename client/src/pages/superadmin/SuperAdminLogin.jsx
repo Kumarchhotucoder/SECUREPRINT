@@ -42,16 +42,7 @@ const SuperAdminLogin = () => {
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #0F0F23 0%, #1A1040 50%, #0F172A 100%)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 'var(--space-4)',
-      position: 'relative',
-      overflow: 'hidden'
-    }}>
+    <div className="superadmin-login-page">
       {/* Background decorative blobs */}
       <div style={{
         position: 'absolute', top: '-20%', right: '-10%',
@@ -66,54 +57,31 @@ const SuperAdminLogin = () => {
         borderRadius: '50%', pointerEvents: 'none'
       }} />
 
-      <div style={{ width: '100%', maxWidth: 420, position: 'relative', zIndex: 1 }}>
+      <div className="superadmin-login-content">
         {/* Brand */}
-        <div style={{ textAlign: 'center', marginBottom: 'var(--space-8)' }}>
+        <div className="superadmin-brand">
           {/* Logo */}
-          <div style={{
-            width: 72, height: 72,
-            background: 'linear-gradient(135deg, #7C3AED 0%, #4F46E5 100%)',
-            borderRadius: 20,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto var(--space-5)',
-            boxShadow: '0 0 40px rgba(124,58,237,0.4)',
-          }}>
-            <Shield size={34} color="white" />
+          <div className="superadmin-logo">
+            <Shield size={28} color="white" />
           </div>
-          <h1 style={{ fontSize: 'var(--font-size-2xl)', color: 'white', marginBottom: 'var(--space-2)', fontWeight: 800 }}>
+          <h1 className="superadmin-title">
             Super Admin Portal
           </h1>
-          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
+          <p className="superadmin-subtitle">
             SecurePrint — Restricted Access Only
           </p>
         </div>
 
         {/* Card */}
-        <div style={{
-          background: 'rgba(255,255,255,0.05)',
-          backdropFilter: 'blur(20px)',
-          border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: 'var(--radius-2xl)',
-          padding: 'var(--space-8)',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.4)'
-        }}>
+        <div className="superadmin-card">
           {/* Active non-super-admin session indicator */}
           {user && user.role !== 'SUPER_ADMIN' && (
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              background: 'rgba(239,68,68,0.15)',
-              border: '1px solid rgba(239,68,68,0.3)',
-              borderRadius: 'var(--radius-md)',
-              padding: '10px 14px',
-              marginBottom: 'var(--space-4)',
-              color: '#FCA5A5',
-              fontSize: 12, fontWeight: 600
-            }}>
+            <div className="superadmin-session-alert">
               <span>Active session: <strong>{user.name}</strong> ({user.role})</span>
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
-                style={{ color: '#FCA5A5', padding: '2px 8px', fontSize: 11, textDecoration: 'underline' }}
+                style={{ color: '#FCA5A5', padding: '4px 10px', fontSize: 11, background: 'rgba(239,68,68,0.2)', borderRadius: 6, width: 'auto' }}
                 onClick={() => logout()}
               >
                 Sign out first
@@ -127,8 +95,8 @@ const SuperAdminLogin = () => {
             background: 'rgba(245,158,11,0.12)',
             border: '1px solid rgba(245,158,11,0.25)',
             borderRadius: 'var(--radius-md)',
-            padding: '10px 14px',
-            marginBottom: 'var(--space-6)',
+            padding: '8px 12px',
+            marginBottom: 'var(--space-4)',
             color: '#FCD34D',
             fontSize: 12, fontWeight: 600
           }}>
@@ -136,9 +104,9 @@ const SuperAdminLogin = () => {
             Super Admin access only. All actions are logged.
           </div>
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             <div className="input-group">
-              <label style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, display: 'block' }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4, display: 'block' }}>
                 Admin Email
               </label>
               <input
@@ -149,25 +117,12 @@ const SuperAdminLogin = () => {
                 placeholder="admin@secureprint.in"
                 autoComplete="email"
                 required
-                style={{
-                  width: '100%',
-                  background: 'rgba(255,255,255,0.07)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '14px 16px',
-                  color: 'white',
-                  fontSize: 14,
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                  transition: 'border-color 0.15s'
-                }}
-                onFocus={e => e.target.style.borderColor = 'rgba(124,58,237,0.6)'}
-                onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.12)'}
+                className="superadmin-input"
               />
             </div>
 
             <div className="input-group">
-              <label style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, display: 'block' }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4, display: 'block' }}>
                 Password
               </label>
               <div style={{ position: 'relative' }}>
@@ -179,20 +134,8 @@ const SuperAdminLogin = () => {
                   placeholder="Secure admin password"
                   autoComplete="current-password"
                   required
-                  style={{
-                    width: '100%',
-                    background: 'rgba(255,255,255,0.07)',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '14px 48px 14px 16px',
-                    color: 'white',
-                    fontSize: 14,
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                    transition: 'border-color 0.15s'
-                  }}
-                  onFocus={e => e.target.style.borderColor = 'rgba(124,58,237,0.6)'}
-                  onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.12)'}
+                  className="superadmin-input"
+                  style={{ paddingRight: 46 }}
                 />
                 <button
                   type="button"
@@ -214,21 +157,7 @@ const SuperAdminLogin = () => {
               id="superadmin-login-btn"
               type="submit"
               disabled={loading}
-              style={{
-                width: '100%',
-                padding: '15px',
-                background: loading ? 'rgba(124,58,237,0.5)' : 'linear-gradient(135deg, #7C3AED 0%, #4F46E5 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 15, fontWeight: 700,
-                cursor: loading ? 'not-allowed' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                marginTop: 'var(--space-2)',
-                transition: 'all 0.15s',
-                boxShadow: loading ? 'none' : '0 4px 24px rgba(124,58,237,0.4)',
-                minHeight: 52
-              }}
+              className="superadmin-btn"
             >
               {loading
                 ? <><div className="spinner" style={{ width: 18, height: 18, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white' }} /> Signing in...</>
@@ -236,17 +165,17 @@ const SuperAdminLogin = () => {
             </button>
           </form>
 
-          <div style={{ textAlign: 'center', marginTop: 'var(--space-6)', paddingTop: 'var(--space-4)', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ textAlign: 'center', marginTop: 'var(--space-5)', paddingTop: 'var(--space-3)', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
             <Link
               to="/shop/login"
-              style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}
             >
               Are you a shopkeeper? → Shop Login
             </Link>
           </div>
         </div>
 
-        <p style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 'var(--space-4)' }}>
+        <p style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 'var(--space-3)' }}>
           Locked after 5 failed attempts • All logins audited
         </p>
       </div>

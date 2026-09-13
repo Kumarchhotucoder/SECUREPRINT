@@ -1203,6 +1203,8 @@ p { line-height: 1.7; }
 
   .container, .container-lg, .container-xl { padding: 0 var(--space-3); }
   .dashboard-content { padding: var(--space-3); }
+  .card { padding: var(--space-4); }
+  .card-lg { padding: var(--space-5); }
   .quick-action-grid { grid-template-columns: 1fr !important; }
 
   .file-item { padding: var(--space-3); }
@@ -1509,4 +1511,166 @@ p { line-height: 1.7; }
     grid-template-columns: 1fr !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   AUTHENTICATION & SUPER ADMIN LOGIN RESPONSIVE STYLES
+═══════════════════════════════════════════════════════════ */
+.superadmin-login-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: linear-gradient(135deg, #0F0F23 0%, #1A1040 50%, #0F172A 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  position: relative;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.superadmin-login-content {
+  width: 100%;
+  max-width: 420px;
+  position: relative;
+  z-index: 1;
+  margin: auto;
+}
+
+.superadmin-brand {
+  text-align: center;
+  margin-bottom: var(--space-6);
+}
+
+.superadmin-logo {
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, #7C3AED 0%, #4F46E5 100%);
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto var(--space-3);
+  box-shadow: 0 0 30px rgba(124, 58, 237, 0.4);
+}
+
+.superadmin-title {
+  font-size: var(--font-size-2xl);
+  color: white;
+  margin-bottom: 4px;
+  font-weight: 800;
+}
+
+.superadmin-subtitle {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 13px;
+}
+
+.superadmin-card {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-2xl);
+  padding: var(--space-8);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+}
+
+.superadmin-session-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin-bottom: var(--space-4);
+  color: #FCA5A5;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.superadmin-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-md);
+  padding: 13px 16px;
+  color: white;
+  font-size: 15px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.superadmin-input:focus {
+  border-color: rgba(124, 58, 237, 0.7);
+}
+
+.superadmin-btn {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #7C3AED 0%, #4F46E5 100%);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: var(--space-2);
+  transition: all 0.15s;
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.35);
+  min-height: 50px;
+}
+
+@media (max-width: 480px) {
+  .superadmin-login-page {
+    padding: 16px 12px 32px;
+    align-items: flex-start;
+  }
+  .superadmin-brand {
+    margin-bottom: var(--space-4);
+  }
+  .superadmin-logo {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    margin-bottom: var(--space-2);
+  }
+  .superadmin-logo svg {
+    width: 24px;
+    height: 24px;
+  }
+  .superadmin-title {
+    font-size: 1.25rem;
+  }
+  .superadmin-subtitle {
+    font-size: 11px;
+  }
+  .superadmin-card {
+    padding: 18px 14px;
+    border-radius: var(--radius-lg);
+  }
+  .superadmin-session-alert {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+  .superadmin-input {
+    padding: 11px 13px;
+    font-size: 14px;
+  }
+  .superadmin-btn {
+    min-height: 46px;
+    font-size: 14px;
+    padding: 12px;
+  }
+}
+
 
