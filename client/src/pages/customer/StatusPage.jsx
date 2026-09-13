@@ -3,7 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { io } from 'socket.io-client'
 import {
   Shield, CheckCircle, Clock, Printer, Trash2,
-  AlertCircle, Receipt, CreditCard, Sparkles, Lock
+  AlertCircle, Receipt, CreditCard, Sparkles, Lock, Banknote
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../lib/api'
@@ -35,6 +35,7 @@ const StatusPage = () => {
 
   // Payment & Countdown state
   const [paying, setPaying] = useState(false)
+  const [payingCash, setPayingCash] = useState(false)
   const [countdown, setCountdown] = useState(null)
 
   // Fetch initial job details
@@ -250,6 +251,31 @@ const StatusPage = () => {
     }
   }
 
+  // Handle Counter Cash Payment
+  const handleCashPayment = async () => {
+    if (paying || payingCash) return
+    setPayingCash(true)
+    try {
+      toast.loading('Confirming counter cash payment...', { id: 'verify-cash' })
+      const verifyRes = await api.post('/payments/verify', {
+        jobId,
+        paymentMethod: 'CASH',
+        razorpay_order_id: `cash_${jobId}`,
+        razorpay_payment_id: `cash_pay_${Date.now()}`,
+        razorpay_signature: 'verified_counter_cash'
+      })
+      toast.dismiss('verify-cash')
+      toast.success('Cash payment confirmed! 10-second file cleanup started.')
+      setJob(prev => ({ ...prev, ...verifyRes.data.data }))
+      setCountdown(10)
+    } catch (err) {
+      toast.dismiss('verify-cash')
+      toast.error(err.response?.data?.message || 'Cash payment confirmation failed. Please try again.')
+    } finally {
+      setPayingCash(false)
+    }
+  }
+
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 'var(--space-4)' }}>
@@ -357,28 +383,69 @@ const StatusPage = () => {
               </span>
             </div>
 
-            <button
-              id="pay-now-btn"
-              className="btn btn-primary btn-lg w-full"
-              style={{
-                height: 52,
-                fontSize: 'var(--font-size-lg)',
-                fontWeight: 800,
-                background: 'linear-gradient(135deg, #1A56DB 0%, #1E40AF 100%)',
-                boxShadow: '0 4px 14px 0 rgba(26, 86, 219, 0.39)'
-              }}
-              disabled={paying}
-              onClick={handlePayment}
-            >
-              {paying ? (
-                <><div className="spinner" /> Processing...</>
-              ) : (
-                <><CreditCard size={20} /> PAY NOW ₹{payableAmount}</>
-              )}
-            </button>
+            {/* Dual Payment Options: Online & Cash */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+              {/* Option 1: Pay Online */}
+              <button
+                id="pay-online-btn"
+                className="btn btn-primary btn-lg w-full"
+                style={{
+                  height: 52,
+                  fontSize: 'var(--font-size-base)',
+                  fontWeight: 800,
+                  background: 'linear-gradient(135deg, #1A56DB 0%, #1E40AF 100%)',
+                  boxShadow: '0 4px 14px 0 rgba(26, 86, 219, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10
+                }}
+                disabled={paying || payingCash}
+                onClick={handlePayment}
+              >
+                {paying ? (
+                  <><div className="spinner" /> Processing Online Payment...</>
+                ) : (
+                  <>
+                    <CreditCard size={20} />
+                    <span>Pay Online ₹{payableAmount} (UPI / Card / GPay)</span>
+                  </>
+                )}
+              </button>
 
-            <div style={{ textAlign: 'center', marginTop: 'var(--space-3)', fontSize: 'var(--font-size-xs)', color: '#92400E', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-              <Lock size={12} /> Secure 256-bit encrypted checkout (UPI / Card / Net Banking)
+              {/* Option 2: Pay Cash at Counter */}
+              <button
+                id="pay-cash-btn"
+                className="btn btn-secondary btn-lg w-full"
+                style={{
+                  height: 52,
+                  fontSize: 'var(--font-size-base)',
+                  fontWeight: 800,
+                  borderColor: '#059669',
+                  color: '#047857',
+                  background: '#ECFDF5',
+                  boxShadow: '0 4px 14px 0 rgba(5, 150, 105, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10
+                }}
+                disabled={paying || payingCash}
+                onClick={handleCashPayment}
+              >
+                {payingCash ? (
+                  <><div className="spinner" /> Confirming Cash...</>
+                ) : (
+                  <>
+                    <Banknote size={20} />
+                    <span>Pay Cash at Counter ₹{payableAmount} (नकद दिया)</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div style={{ textAlign: 'center', marginTop: 'var(--space-4)', fontSize: 'var(--font-size-xs)', color: '#92400E', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+              <Lock size={12} /> Pay online or pay cash at shop counter. Files auto-delete in 10s after payment!
             </div>
           </div>
         )}
