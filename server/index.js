@@ -98,6 +98,19 @@ app.get('/api/health', (req, res) => {
 // Global error handler
 app.use((err, req, res, next) => {
   console.error('[ERROR]', err.message);
+
+  // Handle Mongoose Validation Errors → 400
+  if (err.name === 'ValidationError') {
+    const messages = Object.values(err.errors).map(e => e.message).join(', ');
+    return res.status(400).json({ success: false, message: messages });
+  }
+
+  // Handle Mongoose Duplicate Key Errors → 409
+  if (err.code === 11000) {
+    const field = Object.keys(err.keyValue || {})[0] || 'field';
+    return res.status(409).json({ success: false, message: `${field} already exists.` });
+  }
+
   const status = err.statusCode || 500;
   res.status(status).json({
     success: false,
