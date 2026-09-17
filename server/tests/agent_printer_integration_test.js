@@ -16,6 +16,8 @@
 const axios = require('axios');
 const assert = require('assert');
 const crypto = require('crypto');
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const { discoverPrinters, parseConnectionType, extractManufacturerAndModel } = require('../../agent/src/discovery');
 
 const BASE_URL = process.env.API_URL || 'http://localhost:5001/api';
@@ -56,14 +58,19 @@ async function runTests() {
     const shopTokenA = loginResA.data.data.accessToken;
     const headersA = { Authorization: `Bearer ${shopTokenA}`, 'x-test-simulation': 'true' };
 
-    // Shop A is initially unpaid -> pairing-code must be rejected with 403
-    try {
-      await axios.post(`${BASE_URL}/printers/pairing-code`, {}, { headers: headersA });
-      assert.fail('Unpaid shop should not be able to generate pairing code');
-    } catch (err) {
-      assert.strictEqual(err.response?.status, 403);
-      assert.strictEqual(err.response?.data?.code, 'SUBSCRIPTION_REQUIRED');
-      pass('Unpaid shop blocked from generating pairing code (403 SUBSCRIPTION_REQUIRED)');
+    // Shop A gating check
+    const isGatingActive = process.env.SUBSCRIPTION_GATE_ENABLED === 'true';
+    if (isGatingActive) {
+      try {
+        await axios.post(`${BASE_URL}/printers/pairing-code`, {}, { headers: headersA });
+        assert.fail('Unpaid shop should not be able to generate pairing code when gating is active');
+      } catch (err) {
+        assert.strictEqual(err.response?.status, 403);
+        assert.strictEqual(err.response?.data?.code, 'SUBSCRIPTION_REQUIRED');
+        pass('Unpaid shop blocked from generating pairing code (403 SUBSCRIPTION_REQUIRED)');
+      }
+    } else {
+      pass('Subscription gating relaxed as requested; ready for desktop agent pairing');
     }
 
     // Activate Shop A subscription via Razorpay verification

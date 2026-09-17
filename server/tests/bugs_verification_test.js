@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const FormData = require('form-data');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const BASE_URL = 'http://localhost:5001/api';
 

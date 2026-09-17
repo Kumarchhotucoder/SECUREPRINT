@@ -17,10 +17,21 @@ const { authenticate, requireShopkeeper, requireActiveSubscription } = require('
 
 // Initialize Razorpay instance if credentials exist
 const getRazorpayInstance = () => {
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  const keyId = (process.env.RAZORPAY_KEY_ID || '').trim();
+  const keySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
 
-  if (Razorpay && keyId && keySecret && !keyId.includes('YOUR_') && !keySecret.includes('YOUR_')) {
+  const isConfigured = Boolean(
+    Razorpay &&
+    keyId &&
+    keySecret &&
+    !keyId.toLowerCase().includes('your_') &&
+    !keySecret.toLowerCase().includes('your_') &&
+    !keyId.toLowerCase().includes('dummy') &&
+    !keySecret.toLowerCase().includes('dummy') &&
+    !keyId.includes('rzp_test_secureprint')
+  );
+
+  if (isConfigured) {
     return new Razorpay({
       key_id: keyId,
       key_secret: keySecret
@@ -75,18 +86,27 @@ router.post('/create-order', async (req, res, next) => {
 
     if (rzp) {
       // Live / Sandbox Razorpay API call
-      const rzpOrder = await rzp.orders.create({
-        amount: amountInPaise,
-        currency: 'INR',
-        receipt: `job_${job._id.toString().slice(-10)}`,
-        notes: {
-          jobId: job._id.toString(),
-          jobNumber: job.jobNumber?.toString(),
-          shopId: job.shopId._id.toString(),
-          customerName: job.customerName
+      try {
+        const rzpOrder = await rzp.orders.create({
+          amount: amountInPaise,
+          currency: 'INR',
+          receipt: `job_${job._id.toString().slice(-10)}`,
+          notes: {
+            jobId: job._id.toString(),
+            jobNumber: job.jobNumber?.toString(),
+            shopId: job.shopId._id.toString(),
+            customerName: job.customerName
+          }
+        });
+        orderId = rzpOrder.id;
+      } catch (rzpErr) {
+        if (process.env.NODE_ENV === 'production') {
+          throw rzpErr;
         }
-      });
-      orderId = rzpOrder.id;
+        console.warn('[PAYMENTS] Razorpay orders.create failed in dev, falling back to simulated order:', rzpErr?.message || rzpErr);
+        const randomBytes = crypto.randomBytes(12).toString('hex');
+        orderId = `order_test_${job._id.toString().slice(-6)}_${randomBytes}`;
+      }
     } else {
       // Test simulation mode with verifiable cryptographic order ID
       const randomBytes = crypto.randomBytes(12).toString('hex');

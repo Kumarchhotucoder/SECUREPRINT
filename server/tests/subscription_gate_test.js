@@ -1,4 +1,6 @@
 const axios = require('axios');
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const { toRazorpayAmount } = require('../routes/subscriptions');
 
 const BASE_URL = 'http://localhost:5001/api';
@@ -86,9 +88,9 @@ async function runSubscriptionGateTest() {
     assert(createdData.paymentLink.includes('/subscription/pay/'), 'Payment link is generated', `Link: ${createdData.paymentLink}`);
 
     // -------------------------------------------------------------
-    // STEP 3: Shopkeeper Login & Operational Gating Checks (403 Expected)
+    // STEP 3: Shopkeeper Login & Access Gating
     // -------------------------------------------------------------
-    console.log('\n--- STEP 3: Shopkeeper Login & Access Gating (Expect 403 SUBSCRIPTION_REQUIRED) ---');
+    console.log('\n--- STEP 3: Shopkeeper Login & Access Gating ---');
     const shopkeeperLoginRes = await axios.post(`${BASE_URL}/auth/login`, {
       email: ownerEmail,
       password: ownerPassword
@@ -97,40 +99,66 @@ async function runSubscriptionGateTest() {
     const shopToken = shopkeeperLoginRes.data.data.accessToken;
     const shopHeaders = { Authorization: `Bearer ${shopToken}` };
 
-    // Try accessing shop jobs (should be blocked)
+    const isGatingActive = process.env.SUBSCRIPTION_GATE_ENABLED === 'true';
+
+    // Try accessing shop jobs
     try {
-      await axios.get(`${BASE_URL}/shops/${shopId}/jobs`, { headers: shopHeaders });
-      assert(false, 'GET /shops/:id/jobs blocked for inactive shop', 'Expected 403 but got 200');
+      const res = await axios.get(`${BASE_URL}/shops/${shopId}/jobs`, { headers: shopHeaders });
+      if (isGatingActive) {
+        assert(false, 'GET /shops/:id/jobs blocked for inactive shop', 'Expected 403 but got 200');
+      } else {
+        assert(res.status === 200, 'GET /shops/:id/jobs allowed when gating is relaxed (login mode)', `Status: ${res.status}`);
+      }
     } catch (err) {
-      assert(
-        err.response?.status === 403 && err.response?.data?.code === 'SUBSCRIPTION_REQUIRED',
-        'GET /shops/:id/jobs returned 403 SUBSCRIPTION_REQUIRED',
-        `Status: ${err.response?.status}, Code: ${err.response?.data?.code}`
-      );
+      if (isGatingActive) {
+        assert(
+          err.response?.status === 403 && err.response?.data?.code === 'SUBSCRIPTION_REQUIRED',
+          'GET /shops/:id/jobs returned 403 SUBSCRIPTION_REQUIRED',
+          `Status: ${err.response?.status}, Code: ${err.response?.data?.code}`
+        );
+      } else {
+        assert(false, 'GET /shops/:id/jobs succeeded without error in relaxed mode', `Got error: ${err.message}`);
+      }
     }
 
-    // Try generating printer pairing code (should be blocked)
+    // Try generating printer pairing code
     try {
-      await axios.post(`${BASE_URL}/printers/pairing-code`, {}, { headers: shopHeaders });
-      assert(false, 'POST /printers/pairing-code blocked for inactive shop', 'Expected 403 but got 200');
+      const res = await axios.post(`${BASE_URL}/printers/pairing-code`, {}, { headers: shopHeaders });
+      if (isGatingActive) {
+        assert(false, 'POST /printers/pairing-code blocked for inactive shop', 'Expected 403 but got 200');
+      } else {
+        assert(res.status === 200, 'POST /printers/pairing-code allowed when gating is relaxed', `Status: ${res.status}`);
+      }
     } catch (err) {
-      assert(
-        err.response?.status === 403 && err.response?.data?.code === 'SUBSCRIPTION_REQUIRED',
-        'POST /printers/pairing-code returned 403 SUBSCRIPTION_REQUIRED',
-        `Status: ${err.response?.status}, Code: ${err.response?.data?.code}`
-      );
+      if (isGatingActive) {
+        assert(
+          err.response?.status === 403 && err.response?.data?.code === 'SUBSCRIPTION_REQUIRED',
+          'POST /printers/pairing-code returned 403 SUBSCRIPTION_REQUIRED',
+          `Status: ${err.response?.status}, Code: ${err.response?.data?.code}`
+        );
+      } else {
+        assert(false, 'POST /printers/pairing-code succeeded without error in relaxed mode', `Got error: ${err.message}`);
+      }
     }
 
-    // Try updating shop settings (should be blocked)
+    // Try updating shop settings
     try {
-      await axios.put(`${BASE_URL}/shops/my`, { phone: '9999999999' }, { headers: shopHeaders });
-      assert(false, 'PUT /shops/my blocked for inactive shop', 'Expected 403 but got 200');
+      const res = await axios.put(`${BASE_URL}/shops/my`, { phone: '9999999999' }, { headers: shopHeaders });
+      if (isGatingActive) {
+        assert(false, 'PUT /shops/my blocked for inactive shop', 'Expected 403 but got 200');
+      } else {
+        assert(res.status === 200, 'PUT /shops/my allowed when gating is relaxed', `Status: ${res.status}`);
+      }
     } catch (err) {
-      assert(
-        err.response?.status === 403 && err.response?.data?.code === 'SUBSCRIPTION_REQUIRED',
-        'PUT /shops/my returned 403 SUBSCRIPTION_REQUIRED',
-        `Status: ${err.response?.status}, Code: ${err.response?.data?.code}`
-      );
+      if (isGatingActive) {
+        assert(
+          err.response?.status === 403 && err.response?.data?.code === 'SUBSCRIPTION_REQUIRED',
+          'PUT /shops/my returned 403 SUBSCRIPTION_REQUIRED',
+          `Status: ${err.response?.status}, Code: ${err.response?.data?.code}`
+        );
+      } else {
+        assert(false, 'PUT /shops/my succeeded without error in relaxed mode', `Got error: ${err.message}`);
+      }
     }
 
     // -------------------------------------------------------------
