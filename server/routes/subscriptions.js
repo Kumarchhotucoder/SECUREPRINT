@@ -121,7 +121,11 @@ router.get('/status', authenticate, requireShopkeeper, async (req, res, next) =>
     }
 
     const sub = shop.subscription || {};
-    const isOperational = shop.status === 'ACTIVE' && sub.status === 'ACTIVE';
+    const isGatingEnabled = process.env.SUBSCRIPTION_GATE_ENABLED === 'true';
+    const isOperational = !isGatingEnabled || (
+      (shop.status === 'ACTIVE' || shop.isActive) &&
+      (sub.status === 'ACTIVE' || sub.status === 'TRIAL')
+    );
 
     res.json({
       success: true,

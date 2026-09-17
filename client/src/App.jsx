@@ -47,18 +47,20 @@ const ShopSubscriptionGuard = ({ children }) => {
   useEffect(() => {
     if (!user || user.role === 'SUPER_ADMIN') {
       setChecking(false)
+      setIsOperational(true)
       return
     }
     const checkSub = async () => {
       try {
         const res = await api.get('/subscriptions/status')
-        if (res.data?.success && res.data.data?.isOperational) {
-          setIsOperational(true)
+        if (res.data?.success) {
+          setIsOperational(res.data.data?.isOperational ?? true)
         } else {
-          setIsOperational(false)
+          setIsOperational(true)
         }
       } catch (err) {
-        setIsOperational(false)
+        // Do not block dashboard login on status lookup error
+        setIsOperational(true)
       } finally {
         setChecking(false)
       }

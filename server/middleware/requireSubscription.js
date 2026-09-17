@@ -68,9 +68,15 @@ const requireActiveSubscription = async (req, res, next) => {
       }
     }
 
+    const isGatingEnabled = process.env.SUBSCRIPTION_GATE_ENABLED === 'true';
+    if (!isGatingEnabled) {
+      req.shop = shop;
+      return next();
+    }
+
     // State machine check
-    const isShopActive = shop.status === 'ACTIVE';
-    const isSubActive = sub.status === 'ACTIVE';
+    const isShopActive = shop.status === 'ACTIVE' || shop.isActive;
+    const isSubActive = sub.status === 'ACTIVE' || sub.status === 'TRIAL';
 
     if (!isShopActive || !isSubActive) {
       await logEvent('SUBSCRIPTION_GATE_BLOCKED', {
