@@ -20,7 +20,7 @@ function createTray() {
   
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Open SecurePrint Agent',
+      label: 'Open SecurePrint',
       click: () => {
         if (mainWindow) {
           mainWindow.show();
@@ -29,22 +29,79 @@ function createTray() {
       }
     },
     {
-      label: 'Sync Printers Now',
+      label: 'Printer Status',
+      click: async () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+        if (agent && agent.isPaired()) {
+          await agent.syncPrinters();
+        }
+      }
+    },
+    {
+      label: 'Refresh Printers',
       click: async () => {
         if (agent && agent.isPaired()) {
           await agent.syncPrinters();
         }
       }
     },
+    {
+      label: 'Reconnect',
+      click: async () => {
+        if (agent && agent.isPaired()) {
+          agent.stop();
+          await agent.start();
+        }
+      }
+    },
+    {
+      label: 'Pause Printing',
+      type: 'checkbox',
+      checked: false,
+      click: (item) => {
+        if (agent && agent.printEngine) {
+          agent.printEngine.isPaused = item.checked;
+        }
+      }
+    },
+    {
+      label: 'Settings',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      }
+    },
     { type: 'separator' },
     {
-      label: 'Quit',
+      label: 'Logout / Unpair',
+      click: () => {
+        if (agent) {
+          agent.unpair();
+          if (mainWindow) mainWindow.webContents.send('unpaired');
+        }
+      }
+    },
+    {
+      label: 'Exit',
       click: () => {
         app.isQuitting = true;
         app.quit();
       }
     }
   ]);
+
+  // Enable auto-start with Windows
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: true,
+      path: process.execPath
+    });
+  } catch {}
 
   tray.setToolTip('SecurePrint Desktop Print Agent');
   tray.setContextMenu(contextMenu);

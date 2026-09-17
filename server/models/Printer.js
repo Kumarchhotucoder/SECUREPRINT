@@ -33,18 +33,60 @@ const printerSchema = new mongoose.Schema({
   },
   connectionType: {
     type: String,
-    enum: ['USB', 'WIFI', 'LAN', 'SHARED', 'WINDOWS_INSTALLED', 'VIRTUAL'],
+    enum: ['USB', 'WIFI', 'LAN', 'SHARED', 'WINDOWS_INSTALLED', 'VIRTUAL', 'UNKNOWN'],
     default: 'WINDOWS_INSTALLED'
+  },
+  isRegistered: {
+    type: Boolean,
+    default: true,
+    index: true
+  },
+  registeredAt: {
+    type: Date
+  },
+  manufacturer: {
+    type: String,
+    trim: true
+  },
+  model: {
+    type: String,
+    trim: true
+  },
+  deviceIdentifier: {
+    type: String,
+    trim: true
   },
   status: {
     type: String,
-    enum: ['READY', 'ONLINE', 'OFFLINE', 'ERROR', 'PAPER_OUT', 'PAPER_JAM', 'LOW_INK', 'LOW_TONER', 'BUSY', 'UNKNOWN'],
+    enum: [
+      'DISCOVERED',
+      'CONNECTING',
+      'CONNECTED',
+      'READY',
+      'ONLINE',
+      'PRINTING',
+      'OFFLINE',
+      'ERROR',
+      'PAPER_OUT',
+      'PAPER_JAM',
+      'LOW_INK',
+      'LOW_TONER',
+      'BUSY',
+      'UNKNOWN',
+      'DISCONNECTED'
+    ],
     default: 'READY',
     index: true
   },
   statusDetails: {
     type: String,
     trim: true
+  },
+  capabilities: {
+    color_supported: { type: Boolean, default: false },
+    duplex_supported: { type: Boolean, default: false },
+    paper_sizes: { type: [String], default: ['A4'] },
+    max_copies: { type: Number, default: 99 }
   },
   isColorCapable: {
     type: Boolean,

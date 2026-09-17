@@ -105,7 +105,9 @@ class AgentConnection {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: Infinity,
-      reconnectionDelay: 2000,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 30000,
+      randomizationFactor: 0.5,
       auth: {
         token: agentToken
       }
@@ -118,7 +120,9 @@ class AgentConnection {
       this.socket.emit('join-agent', {
         agentId,
         shopId,
-        computerName: os.hostname()
+        computerName: os.hostname(),
+        os: `${os.type()} ${os.release()}`,
+        appVersion: '1.0.0'
       });
 
       // Discover and sync local printers immediately
@@ -131,6 +135,23 @@ class AgentConnection {
 
     this.socket.on('connect_error', (err) => {
       this.logger.error(`[Agent] Connection error: ${err.message}`);
+    });
+
+    // Listen for on-demand discovery scan request
+    this.socket.on('discover-printers', async (data, callback) => {
+      this.logger.info('[Agent] Received on-demand discover-printers request from cloud');
+      const printers = await this.syncPrinters();
+      if (typeof callback === 'function') {
+        callback({ success: true, count: printers.length, printers });
+      }
+    });
+
+    // Listen for test print command
+    this.socket.on('test-print-command', async (testData) => {
+      this.logger.info('[Agent] Received test-print-command from cloud:', testData.attemptId);
+      if (this.printEngine) {
+        await this.printEngine.executeTestPrint(testData);
+      }
     });
 
     // Listen for agent subscription/authorization rejection

@@ -244,6 +244,54 @@ class PrintEngine {
       }
     }
   }
+
+  /**
+   * Execute physical SecurePrint test page print
+   */
+  async executeTestPrint(testPayload) {
+    const { attemptId, shopName, printerName, systemPrinterName, printedAt, printSettings = {} } = testPayload;
+    this.logger.info(`[PrintEngine] Executing physical test print for ${printerName} (${attemptId})...`);
+
+    let tempFilePath = null;
+    try {
+      const tempDir = os.tmpdir();
+      const filename = `secureprint_testpage_${attemptId}.txt`;
+      tempFilePath = path.join(tempDir, filename);
+
+      const testContent = [
+        '====================================================',
+        '               SECUREPRINT TEST PAGE                ',
+        '         Print Smart | Secure | Simple              ',
+        '====================================================',
+        '',
+        `Shop:      ${shopName || 'SecurePrint Shop'}`,
+        `Printer:   ${printerName}`,
+        `Device:    ${systemPrinterName}`,
+        `Host PC:   ${os.hostname()}`,
+        `Timestamp: ${printedAt || new Date().toISOString()}`,
+        `Attempt:   ${attemptId}`,
+        '',
+        '✓ Windows Print Spooler Connection: VERIFIED',
+        '✓ Hardware Communication: OK',
+        '',
+        '===================================================='
+      ].join('\n');
+
+      fs.writeFileSync(tempFilePath, testContent, 'utf8');
+
+      const printerObj = { name: printerName, systemPrinterName };
+      await this._executePrint(tempFilePath, printerObj, printSettings);
+      this.logger.info(`[PrintEngine] Test page successfully submitted to ${printerName}`);
+    } catch (err) {
+      this.logger.error(`[PrintEngine] Test print failed:`, err.message);
+    } finally {
+      if (tempFilePath && fs.existsSync(tempFilePath)) {
+        try {
+          fs.unlinkSync(tempFilePath);
+        } catch {}
+      }
+    }
+  }
 }
 
 module.exports = PrintEngine;

@@ -37,7 +37,7 @@ const paymentSchema = new mongoose.Schema({
   },
   gateway: {
     type: String,
-    enum: ['RAZORPAY', 'CASH', 'UPI_DIRECT', 'MANUAL'],
+    enum: ['RAZORPAY', 'CASH', 'UPI_DIRECT', 'MANUAL', 'MANUAL_ADMIN'],
     default: 'RAZORPAY'
   },
   gatewayOrderId: {

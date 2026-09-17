@@ -92,6 +92,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/cleanup', cleanupRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
+app.post('/api/webhooks/razorpay', subscriptionRoutes.handleRazorpayWebhook);
 app.use('/api/printers', printerRoutes);
 
 // Health check

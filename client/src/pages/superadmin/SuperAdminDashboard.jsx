@@ -310,6 +310,148 @@ const ResetPasswordModal = ({ user, onClose }) => {
   )
 }
 
+// ── Manual Activate Modal ─────────────────────────────────────────
+const ManualActivateModal = ({ shop, onClose, onActivated }) => {
+  const [reason, setReason] = useState('Offline Cash received at shop counter')
+  const [customReason, setCustomReason] = useState('')
+  const [notes, setNotes] = useState('')
+  const [durationDays, setDurationDays] = useState(30)
+  const [submitting, setSubmitting] = useState(false)
+
+  const REASON_OPTIONS = [
+    'Offline Cash received at shop counter',
+    'Direct Bank Transfer (NEFT/RTGS/IMPS)',
+    'UPI Counter QR Payment Verified',
+    'Promotional Pilot / Partner Onboarding',
+    'Corporate / Annual Invoicing Agreement',
+    'Other Administrative Override'
+  ]
+
+  const handleActivate = async (e) => {
+    e.preventDefault()
+    const finalReason = reason === 'Other Administrative Override' ? customReason.trim() : reason
+    if (!finalReason) {
+      toast.error('A specific reason is mandatory for manual administrative activation.')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const res = await api.post(`/admin/shops/${shop._id}/manual-activate`, {
+        reason: finalReason,
+        notes: notes.trim(),
+        durationDays: Number(durationDays) || 30
+      })
+      toast.success(res.data?.message || `Shop "${shop.name}" manually activated!`)
+      onActivated()
+      onClose()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Manual activation failed')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="admin-modal-overlay">
+      <div className="admin-modal" style={{ maxWidth: 520 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#B45309' }}>
+            <Zap size={20} color="#D97706" /> Manual Shop Activation
+          </h3>
+          <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={20} /></button>
+        </div>
+
+        <div style={{
+          background: '#FEF3C7',
+          border: '1px solid #FCD34D',
+          borderRadius: 'var(--radius-md)',
+          padding: '12px 14px',
+          marginBottom: 'var(--space-4)',
+          fontSize: 12,
+          color: '#92400E'
+        }}>
+          <strong>Administrative Override Notice:</strong> This action manually activates the shop without Razorpay online payment. An immutable audit record will be logged with your Admin ID and timestamp.
+        </div>
+
+        <div style={{ background: 'var(--color-bg)', padding: '12px 16px', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-4)', fontSize: 13 }}>
+          <div style={{ marginBottom: 4 }}><strong>Shop:</strong> {shop.name}</div>
+          <div style={{ marginBottom: 4 }}><strong>Owner:</strong> {shop.ownerId?.name} ({shop.ownerId?.email})</div>
+          <div><strong>Plan:</strong> {shop.subscription?.plan || 'STARTER'} (₹{shop.subscription?.monthlyPrice || 499}/mo)</div>
+        </div>
+
+        <form onSubmit={handleActivate}>
+          <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+            <div className="input-group">
+              <label className="input-label">Mandatory Activation Reason *</label>
+              <select
+                className="input"
+                value={reason}
+                onChange={e => setReason(e.target.value)}
+              >
+                {REASON_OPTIONS.map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
+
+            {reason === 'Other Administrative Override' && (
+              <div className="input-group">
+                <label className="input-label">Specify Reason *</label>
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="e.g., Special partnership agreement"
+                  value={customReason}
+                  onChange={e => setCustomReason(e.target.value)}
+                  required
+                />
+              </div>
+            )}
+
+            <div className="input-group">
+              <label className="input-label">Access Duration (Days)</label>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={365}
+                value={durationDays}
+                onChange={e => setDurationDays(e.target.value)}
+              />
+            </div>
+
+            <div className="input-group">
+              <label className="input-label">Audit Notes (Optional)</label>
+              <textarea
+                className="input"
+                rows={2}
+                placeholder="Transaction reference, invoice number, or offline receipt..."
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-6)' }}>
+            <button type="button" className="btn btn-ghost" onClick={onClose} style={{ flex: 1 }}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={submitting}
+              style={{ flex: 2, background: '#D97706', borderColor: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            >
+              {submitting ? <><div className="spinner" /> Activating...</> : <><Zap size={16} /> Confirm Manual Activation</>}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ── Shop Detail Modal ────────────────────────────────────────────
 const ShopDetailModal = ({ shop, onClose }) => (
   <div className="admin-modal-overlay">
@@ -408,6 +550,7 @@ const SuperAdminDashboard = () => {
   const [editShop, setEditShop] = useState(null)
   const [viewShop, setViewShop] = useState(null)
   const [resetUser, setResetUser] = useState(null)
+  const [manualActivateShop, setManualActivateShop] = useState(null)
 
   // ── Fetchers ─────────────────────────────────────────────────
   const fetchAnalytics = useCallback(async () => {
@@ -712,6 +855,29 @@ const SuperAdminDashboard = () => {
                                 <Link2 size={11} /> Copy Pay Link
                               </button>
                             )}
+                            {(shop.subscription?.status !== 'ACTIVE' || !shop.isActive) && (
+                              <button
+                                type="button"
+                                className="btn btn-xs"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  marginTop: 4,
+                                  fontSize: 10,
+                                  padding: '2px 6px',
+                                  background: '#FEF3C7',
+                                  color: '#92400E',
+                                  border: '1px solid #FCD34D',
+                                  borderRadius: 4,
+                                  fontWeight: 700
+                                }}
+                                onClick={() => setManualActivateShop(shop)}
+                                title="Manually Activate Shop via Administrative Override"
+                              >
+                                <Zap size={11} /> Manually Activate
+                              </button>
+                            )}
                           </td>
                           <td style={{ padding: '12px 14px' }}>
                             <StatusBadge label={shop.isActive ? 'Active' : 'Inactive'} style={shop.isActive ? BADGE.ACTIVE : BADGE.INACTIVE} />
@@ -939,6 +1105,16 @@ const SuperAdminDashboard = () => {
       )}
       {resetUser && (
         <ResetPasswordModal user={resetUser} onClose={() => setResetUser(null)} />
+      )}
+      {manualActivateShop && (
+        <ManualActivateModal
+          shop={manualActivateShop}
+          onClose={() => setManualActivateShop(null)}
+          onActivated={() => {
+            fetchShops()
+            fetchAnalytics()
+          }}
+        />
       )}
     </div>
   )

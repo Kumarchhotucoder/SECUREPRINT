@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import {
-  Shield, Check, AlertCircle, Sparkles, CreditCard,
-  Lock, ArrowRight, Store, CheckCircle, RefreshCw, LogOut
+  Shield, Check, AlertCircle, CreditCard,
+  Lock, ArrowRight, CheckCircle, RefreshCw, LogOut,
+  AlertTriangle, HelpCircle
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../lib/api'
@@ -55,6 +56,24 @@ const PLANS_DATA = [
   }
 ]
 
+// Dynamic loader helper for official Razorpay checkout script
+const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    if (window.Razorpay) return resolve(true)
+    const existing = document.querySelector('script[src*="checkout.razorpay.com"]')
+    if (existing) {
+      existing.onload = () => resolve(true)
+      existing.onerror = () => resolve(false)
+      return
+    }
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.onload = () => resolve(true)
+    script.onerror = () => resolve(false)
+    document.body.appendChild(script)
+  })
+}
+
 export default function SubscriptionRequiredPage() {
   const { token } = useParams()
   const navigate = useNavigate()
@@ -65,6 +84,7 @@ export default function SubscriptionRequiredPage() {
   const [selectedPlanId, setSelectedPlanId] = useState('STARTER')
   const [paying, setPaying] = useState(false)
   const [activated, setActivated] = useState(false)
+  const [paymentError, setPaymentError] = useState(null)
 
   // 1. Fetch Subscription Status or Tokenized Data
   const fetchStatus = useCallback(async () => {
@@ -104,24 +124,70 @@ export default function SubscriptionRequiredPage() {
   const handlePaySubscription = async () => {
     if (paying) return
     setPaying(true)
+    setPaymentError(null)
 
     try {
-      toast.loading('Preparing subscription order...', { id: 'sub-order' })
-      const orderRes = await api.post('/subscriptions/create-order', {
-        planId: selectedPlan.id,
-        token: token || undefined
-      })
+      toast.loading('Initializing subscription order...', { id: 'sub-order' })
+      let orderRes
+      try {
+        orderRes = await api.post('/subscriptions/create-order', {
+          planId: selectedPlan.id,
+          token: token || undefined
+        })
+      } catch (reqErr) {
+        toast.dismiss('sub-order')
+        const code = reqErr.response?.data?.code || 'ORDER_CREATION_FAILED'
+        const message = reqErr.response?.data?.message || 'Unable to create payment order. Please try again.'
+
+        if (code === 'PAYMENT_CONFIG_REQUIRED') {
+          setPaymentError({
+            code: 'PAYMENT_CONFIG_ERROR',
+            title: 'Payment Gateway Configuration Required',
+            message: 'Razorpay credentials (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET) are missing or unconfigured on the server. Please contact administrator to configure Razorpay keys, or have Super Admin activate your shop via Manual Administrative Override.'
+          })
+        } else {
+          setPaymentError({
+            code,
+            title: 'Unable to Create Payment Order',
+            message
+          })
+        }
+        setPaying(false)
+        return
+      }
 
       toast.dismiss('sub-order')
       const orderData = orderRes.data?.data
 
       if (!orderData || !orderData.orderId) {
-        throw new Error('Failed to create payment order')
+        setPaymentError({
+          code: 'ORDER_CREATION_FAILED',
+          title: 'Unable to Create Payment Order',
+          message: 'Server failed to generate order ID. Please try again.'
+        })
+        setPaying(false)
+        return
       }
 
-      // Check for Razorpay SDK
-      if (!window.Razorpay) {
-        toast.error('Razorpay SDK failed to load. Please refresh the page.')
+      // If server explicitly reported gateway is unconfigured
+      if (orderData.isConfigured === false) {
+        setPaymentError({
+          code: 'PAYMENT_CONFIG_ERROR',
+          title: 'Payment Gateway Configuration Required',
+          message: 'Razorpay credentials are required to process online payment. Please configure RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in server/.env or activate the shop via Super Admin Manual Activation.'
+        })
+        setPaying(false)
+        return
+      }
+
+      // Check / load Razorpay SDK
+      const isSdkReady = await loadRazorpayScript()
+      if (!isSdkReady || !window.Razorpay) {
+        setPaymentError({
+          code: 'SDK_LOAD_ERROR',
+          title: 'Secure Payment Checkout Could Not Be Loaded',
+          message: 'Razorpay Checkout script could not be loaded. Please check your internet connection or disable ad-blockers, then try again.'
+        })
         setPaying(false)
         return
       }
@@ -144,12 +210,16 @@ export default function SubscriptionRequiredPage() {
         modal: {
           ondismiss: () => {
             setPaying(false)
-            toast('Payment was cancelled. You can complete it whenever ready.', { icon: 'ℹ️' })
+            setPaymentError({
+              code: 'PAYMENT_CANCELLED',
+              title: 'Payment Cancelled',
+              message: 'Payment was cancelled before completion. Your shop is still inactive. No subscription was activated.'
+            })
           }
         },
         handler: async (response) => {
           try {
-            toast.loading('Verifying payment with SecurePrint Cloud...', { id: 'sub-verify' })
+            toast.loading('Cryptographically verifying payment on server...', { id: 'sub-verify' })
             const verifyRes = await api.post('/subscriptions/verify', {
               token: token || undefined,
               planId: selectedPlan.id,
@@ -161,10 +231,17 @@ export default function SubscriptionRequiredPage() {
             toast.dismiss('sub-verify')
             toast.success(verifyRes.data?.message || 'Subscription activated successfully!')
             setActivated(true)
+            setPaymentError(null)
             setShopData(prev => ({ ...prev, shopStatus: 'ACTIVE', subscriptionStatus: 'ACTIVE' }))
           } catch (vErr) {
             toast.dismiss('sub-verify')
-            toast.error(vErr.response?.data?.message || 'Payment verification failed.')
+            const vCode = vErr.response?.data?.code || 'PAYMENT_VERIFICATION_FAILED'
+            const vMsg = vErr.response?.data?.message || 'Payment verification failed. Your shop has not been activated.'
+            setPaymentError({
+              code: vCode,
+              title: vCode === 'ACTIVATION_FAILED' ? 'Shop Activation Pending' : 'Payment Verification Failed',
+              message: vMsg
+            })
           } finally {
             setPaying(false)
           }
@@ -174,12 +251,20 @@ export default function SubscriptionRequiredPage() {
       const rzpInstance = new window.Razorpay(options)
       rzpInstance.on('payment.failed', (failResp) => {
         setPaying(false)
-        toast.error(`Payment failed: ${failResp.error?.description || 'Transaction unsuccessful'}`)
+        setPaymentError({
+          code: 'PAYMENT_GATEWAY_FAILED',
+          title: 'Payment Failed',
+          message: failResp.error?.description || 'The payment gateway reported a failure. No subscription was activated.'
+        })
       })
       rzpInstance.open()
     } catch (err) {
       toast.dismiss('sub-order')
-      toast.error(err.response?.data?.message || 'Payment initiation failed.')
+      setPaymentError({
+        code: 'NETWORK_ERROR',
+        title: 'Connection Error',
+        message: 'Unable to connect to SecurePrint server. Please check your network connection.'
+      })
       setPaying(false)
     }
   }
@@ -234,6 +319,104 @@ export default function SubscriptionRequiredPage() {
 
       {/* Main Container */}
       <div style={{ maxWidth: 860, margin: '40px auto', padding: '0 20px', width: '100%' }}>
+        {/* Structured Error State Card */}
+        {paymentError && (
+          <div
+            className="card animate-fadeIn"
+            style={{
+              border: '2px solid #DC2626',
+              background: '#FEF2F2',
+              padding: 24,
+              borderRadius: 'var(--radius-lg)',
+              marginBottom: 24,
+              boxShadow: '0 4px 14px rgba(220, 38, 38, 0.1)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+              <div style={{
+                width: 44,
+                height: 44,
+                borderRadius: '50%',
+                background: '#FEE2E2',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                color: '#DC2626'
+              }}>
+                <AlertTriangle size={24} />
+              </div>
+
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#991B1B', margin: 0 }}>
+                    {paymentError.title}
+                  </h3>
+                  {paymentError.code && (
+                    <span style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      fontFamily: 'monospace',
+                      background: '#FEE2E2',
+                      color: '#991B1B',
+                      padding: '2px 8px',
+                      borderRadius: 6,
+                      border: '1px solid #FCA5A5'
+                    }}>
+                      {paymentError.code}
+                    </span>
+                  )}
+                </div>
+
+                <p style={{ color: '#B91C1C', fontSize: '0.9rem', margin: '8px 0 14px', lineHeight: 1.5 }}>
+                  {paymentError.message}
+                </p>
+
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.8)',
+                  border: '1px dashed #F87171',
+                  padding: '10px 14px',
+                  borderRadius: 8,
+                  fontSize: '0.82rem',
+                  color: '#7F1D1D',
+                  marginBottom: 16
+                }}>
+                  <strong>Status:</strong> Your shop is still <strong>INACTIVE (PENDING_PAYMENT)</strong>. No subscription was activated. Operational features remain locked until verified payment.
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    style={{ fontWeight: 700, padding: '8px 16px', background: '#DC2626', borderColor: '#DC2626', display: 'flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => {
+                      setPaymentError(null)
+                      handlePaySubscription()
+                    }}
+                  >
+                    <RefreshCw size={14} /> Try Again
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ fontWeight: 600, padding: '8px 16px' }}
+                    onClick={() => setPaymentError(null)}
+                  >
+                    Dismiss
+                  </button>
+                  <a
+                    href="mailto:support@secureprint.in"
+                    className="btn btn-ghost btn-sm"
+                    style={{ fontSize: '0.8rem', color: '#991B1B', textDecoration: 'underline' }}
+                  >
+                    Contact Administrator / Super Admin
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {activated ? (
           /* Activated Success Card */
           <div className="card animate-slideUp" style={{ textAlign: 'center', padding: '48px 24px', border: '2px solid #10B981' }}>

@@ -51,7 +51,7 @@ async function runPaymentWorkflowTest() {
       password: shopOwnerPassword
     });
     const shopToken = loginRes.data.data.accessToken;
-    const shopHeaders = { Authorization: `Bearer ${shopToken}` };
+    const shopHeaders = { Authorization: `Bearer ${shopToken}`, 'x-test-simulation': 'true' };
 
     // Activate subscription
     const subOrder = await axios.post(`${BASE_URL}/subscriptions/create-order`, { planId: 'PRO' }, { headers: shopHeaders });
@@ -212,7 +212,7 @@ async function runPaymentWorkflowTest() {
       email: `other_${otherUnique}@test.com`,
       password: 'Password123!'
     });
-    const shopBHeaders = { Authorization: `Bearer ${loginBRes.data.data.accessToken}` };
+    const shopBHeaders = { Authorization: `Bearer ${loginBRes.data.data.accessToken}`, 'x-test-simulation': 'true' };
     const subBOrder = await axios.post(`${BASE_URL}/subscriptions/create-order`, { planId: 'PRO' }, { headers: shopBHeaders });
     await axios.post(`${BASE_URL}/subscriptions/verify`, {
       planId: 'PRO',

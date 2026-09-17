@@ -48,11 +48,25 @@ function inferColorCapability(name = '', driver = '') {
   return false;
 }
 
+function extractManufacturerAndModel(name = '', driver = '') {
+  const combined = `${name} ${driver}`;
+  const known = ['HP', 'Hewlett-Packard', 'Epson', 'Canon', 'Brother', 'Xerox', 'Ricoh', 'Samsung', 'Lexmark', 'Konica', 'Kyocera', 'Pantum', 'Zebra'];
+  for (const brand of known) {
+    const regex = new RegExp(`\\b${brand}\\b`, 'i');
+    if (regex.test(combined)) {
+      const cleanBrand = brand === 'Hewlett-Packard' ? 'HP' : brand;
+      const model = name.replace(regex, '').trim() || driver.replace(regex, '').trim();
+      return { manufacturer: cleanBrand, model: model || name };
+    }
+  }
+  return { manufacturer: 'Generic / Windows Driver', model: name };
+}
+
 /**
  * Windows Discovery via PowerShell CimInstance
  */
 async function discoverWindowsPrinters() {
-  const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Printer | Select-Object Name, PortName, DriverName, Default, PrinterStatus, WorkOffline, Color, Duplex | ConvertTo-Json -Compress"`;
+  const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Printer | Select-Object Name, PortName, DriverName, Default, PrinterStatus, ExtendedPrinterStatus, DetectedErrorState, WorkOffline, Color, Duplex, DeviceID | ConvertTo-Json -Compress"`;
   try {
     const { stdout } = await execAsync(cmd, { timeout: 10000 });
     if (!stdout.trim()) return [];
@@ -63,17 +77,32 @@ async function discoverWindowsPrinters() {
     }
 
     return raw.map((p) => {
-      const isOffline = Boolean(p.WorkOffline || p.PrinterStatus === 1 || p.PrinterStatus === 2 || p.PrinterStatus === 7);
+      // Determine physical / spooler status
       let status = 'READY';
-      if (isOffline) {
+      let statusDetails = '';
+
+      if (p.WorkOffline || p.PrinterStatus === 7 || p.ExtendedPrinterStatus === 7) {
         status = 'OFFLINE';
-      } else if (p.PrinterStatus === 4) {
+      } else if (p.DetectedErrorState === 5) {
+        status = 'PAPER_OUT';
+        statusDetails = 'Out of paper';
+      } else if (p.DetectedErrorState === 9) {
+        status = 'PAPER_JAM';
+        statusDetails = 'Paper jam detected';
+      } else if (p.DetectedErrorState === 6) {
+        status = 'LOW_TONER';
+        statusDetails = 'Toner/Ink low';
+      } else if (p.PrinterStatus === 4 || p.ExtendedPrinterStatus === 4) {
         status = 'PRINTING';
-      } else if (p.PrinterStatus === 5) {
+      } else if (p.PrinterStatus === 5 || p.ExtendedPrinterStatus === 5) {
         status = 'WARMUP';
+      } else if (p.ExtendedPrinterStatus === 9) {
+        status = 'ERROR';
+        statusDetails = 'Printer error';
       }
 
       const connectionType = parseConnectionType(p.PortName);
+      const { manufacturer, model } = extractManufacturerAndModel(p.Name, p.DriverName);
       const isColorCapable = p.Color !== null && p.Color !== undefined 
         ? Boolean(p.Color) 
         : inferColorCapability(p.Name, p.DriverName);
@@ -81,8 +110,12 @@ async function discoverWindowsPrinters() {
       return {
         name: p.Name,
         systemPrinterName: p.Name,
+        manufacturer,
+        model,
+        deviceIdentifier: p.PortName || p.DeviceID || p.Name,
         connectionType,
         status,
+        statusDetails,
         isDefault: Boolean(p.Default),
         isColorCapable,
         supportsDuplex: Boolean(p.Duplex),
@@ -105,7 +138,6 @@ async function discoverUnixPrinters() {
     let deviceMap = {};
     try {
       const { stdout: vOut } = await execAsync('lpstat -v', { timeout: 5000 });
-      // Example line: "device for HP_Smart_Tank_580: usb://HP/Smart%20Tank%20580?serial=..."
       const lines = vOut.split('\n');
       for (const line of lines) {
         const match = line.match(/^device for ([^:]+):\s*(.+)$/i);
@@ -113,9 +145,7 @@ async function discoverUnixPrinters() {
           deviceMap[match[1].trim()] = match[2].trim();
         }
       }
-    } catch {
-      // ignore lpstat -v error
-    }
+    } catch {}
 
     // 2. Get default printer
     let defaultPrinter = '';
@@ -123,9 +153,7 @@ async function discoverUnixPrinters() {
       const { stdout: dOut } = await execAsync('lpstat -d', { timeout: 5000 });
       const match = dOut.match(/system default destination:\s*(.+)$/i);
       if (match) defaultPrinter = match[1].trim();
-    } catch {
-      // ignore
-    }
+    } catch {}
 
     // 3. Get printer list & status
     const { stdout: pOut } = await execAsync('lpstat -p', { timeout: 5000 });
@@ -133,7 +161,6 @@ async function discoverUnixPrinters() {
     const printers = [];
 
     for (const line of pLines) {
-      // Example: "printer HP_Smart_Tank_580 is idle. enabled since Mon Sep 14..."
       const match = line.match(/^printer\s+([^\s]+)\s+(is idle|is printing|disabled)/i);
       if (match) {
         const sysName = match[1].trim();
@@ -148,11 +175,15 @@ async function discoverUnixPrinters() {
         const uri = deviceMap[sysName] || '';
         const connectionType = parseConnectionType(uri);
         const displayName = sysName.replace(/_/g, ' ');
+        const { manufacturer, model } = extractManufacturerAndModel(displayName, uri);
         const isColorCapable = inferColorCapability(displayName, uri);
 
         printers.push({
           name: displayName,
           systemPrinterName: sysName,
+          manufacturer,
+          model,
+          deviceIdentifier: uri || sysName,
           connectionType,
           status,
           isDefault: sysName === defaultPrinter,
@@ -172,7 +203,8 @@ async function discoverUnixPrinters() {
 }
 
 /**
- * Public discovery function: discovers all installed printers for current OS
+ * Public discovery function: discovers all installed physical/OS printers for current host
+ * Strictly NO fake printers: returns empty array if no physical/installed printers exist.
  */
 async function discoverPrinters() {
   let printers = [];
@@ -182,27 +214,13 @@ async function discoverPrinters() {
     printers = await discoverUnixPrinters();
   }
 
-  // Fallback demo printer if zero physical printers detected (e.g. fresh development environment)
-  if (printers.length === 0) {
-    console.log('[Discovery] No physical printers detected via OS. Providing local loopback virtual printer for testing.');
-    printers.push({
-      name: 'SecurePrint Virtual DeskJet (Demo)',
-      systemPrinterName: 'SecurePrint_Virtual_DeskJet',
-      connectionType: 'USB',
-      status: 'READY',
-      isDefault: true,
-      isColorCapable: true,
-      supportsDuplex: true,
-      paperSizes: ['A4', 'Letter'],
-      deviceUri: 'usb://SecurePrint/Virtual'
-    });
-  }
-
+  // Zero fake fallback: return actual hardware discovery results
   return printers;
 }
 
 module.exports = {
   discoverPrinters,
   parseConnectionType,
-  inferColorCapability
+  inferColorCapability,
+  extractManufacturerAndModel
 };

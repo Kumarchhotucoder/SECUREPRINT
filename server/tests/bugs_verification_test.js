@@ -52,7 +52,7 @@ async function runVerification() {
     const loginRes = await axios.post(`${BASE_URL}/auth/login`, { email, password });
     assert(loginRes.status === 200 && loginRes.data.data.accessToken, 'Shopkeeper Login');
     const shopToken = loginRes.data.data.accessToken;
-    const shopHeaders = { Authorization: `Bearer ${shopToken}` };
+    const shopHeaders = { Authorization: `Bearer ${shopToken}`, 'x-test-simulation': 'true' };
 
     // Activate subscription
     const subOrder = await axios.post(`${BASE_URL}/subscriptions/create-order`, { planId: 'PRO' }, { headers: shopHeaders });

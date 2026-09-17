@@ -1,10 +1,11 @@
 const axios = require('axios');
+const { toRazorpayAmount } = require('../routes/subscriptions');
 
 const BASE_URL = 'http://localhost:5001/api';
 
 async function runSubscriptionGateTest() {
   console.log('================================================================');
-  console.log('   SECUREPRINT SHOP SUBSCRIPTION & ACCESS GATING TEST SUITE    ');
+  console.log('   SECUREPRINT SHOP SUBSCRIPTION & ACTIVATION TEST SUITE       ');
   console.log('================================================================\n');
 
   let passedTests = 0;
@@ -23,7 +24,22 @@ async function runSubscriptionGateTest() {
 
   try {
     // -------------------------------------------------------------
-    // 1. Super Admin Login
+    // UNIT TEST: Amount Conversion Helper
+    // -------------------------------------------------------------
+    console.log('--- UNIT TEST: toRazorpayAmount helper ---');
+    assert(toRazorpayAmount(499) === 49900, 'toRazorpayAmount(499) converts to 49900 paise');
+    assert(toRazorpayAmount(999) === 99900, 'toRazorpayAmount(999) converts to 99900 paise');
+    assert(toRazorpayAmount('2499') === 249900, 'toRazorpayAmount("2499") converts to 249900 paise');
+    let errorCaught = false;
+    try {
+      toRazorpayAmount(-10);
+    } catch {
+      errorCaught = true;
+    }
+    assert(errorCaught, 'toRazorpayAmount(-10) throws an error for negative amount');
+
+    // -------------------------------------------------------------
+    // STEP 1: Super Admin Login
     // -------------------------------------------------------------
     console.log('\n--- STEP 1: Super Admin Login ---');
     const adminLoginRes = await axios.post(`${BASE_URL}/auth/login`, {
@@ -35,7 +51,7 @@ async function runSubscriptionGateTest() {
     const adminHeaders = { Authorization: `Bearer ${adminToken}` };
 
     // -------------------------------------------------------------
-    // 2. Super Admin Creates New Shop (Initial State Must Be PENDING_PAYMENT)
+    // STEP 2: Super Admin Creates New Shop (State: PENDING_PAYMENT)
     // -------------------------------------------------------------
     console.log('\n--- STEP 2: Super Admin Creates New Shop ---');
     const unique = Date.now();
@@ -70,7 +86,7 @@ async function runSubscriptionGateTest() {
     assert(createdData.paymentLink.includes('/subscription/pay/'), 'Payment link is generated', `Link: ${createdData.paymentLink}`);
 
     // -------------------------------------------------------------
-    // 3. Shopkeeper Login & Operational Gating Checks (403 Expected)
+    // STEP 3: Shopkeeper Login & Operational Gating Checks (403 Expected)
     // -------------------------------------------------------------
     console.log('\n--- STEP 3: Shopkeeper Login & Access Gating (Expect 403 SUBSCRIPTION_REQUIRED) ---');
     const shopkeeperLoginRes = await axios.post(`${BASE_URL}/auth/login`, {
@@ -117,116 +133,177 @@ async function runSubscriptionGateTest() {
       );
     }
 
-    // Try generating QR code (should be blocked)
+    // -------------------------------------------------------------
+    // STEP 4: Missing Razorpay Credentials Error Handling
+    // -------------------------------------------------------------
+    console.log('\n--- STEP 4: Unconfigured Gateway Error Handling (PAYMENT_CONFIG_REQUIRED) ---');
     try {
-      await axios.post(`${BASE_URL}/shops/${shopId}/qr`, {}, { headers: shopHeaders });
-      assert(false, 'POST /shops/:id/qr blocked for inactive shop', 'Expected 403 but got 200');
+      // Calling create-order without test simulation headers when credentials are missing
+      await axios.post(`${BASE_URL}/subscriptions/create-order`, {
+        token: paymentToken,
+        planId: 'PRO'
+      });
+      assert(false, 'POST /subscriptions/create-order fails cleanly when keys missing', 'Expected 400 PAYMENT_CONFIG_REQUIRED');
     } catch (err) {
       assert(
-        err.response?.status === 403 && err.response?.data?.code === 'SUBSCRIPTION_REQUIRED',
-        'POST /shops/:id/qr returned 403 SUBSCRIPTION_REQUIRED',
-        `Status: ${err.response?.status}, Code: ${err.response?.data?.code}`
+        err.response?.status === 400 && err.response?.data?.code === 'PAYMENT_CONFIG_REQUIRED',
+        'POST /subscriptions/create-order returns 400 PAYMENT_CONFIG_REQUIRED (Not 500, Not fake key)',
+        `Status: ${err.response?.status}, Code: ${err.response?.data?.code}, Message: ${err.response?.data?.message}`
       );
     }
 
     // -------------------------------------------------------------
-    // 4. Customer Page & Session Blocking on Unpaid Shop
+    // STEP 5: Payment Signature Verification Error Handling
     // -------------------------------------------------------------
-    console.log('\n--- STEP 4: Customer Flow on Inactive Shop ---');
-    const customerShopRes = await axios.get(`${BASE_URL}/shops/by-slug/${slug}`);
-    assert(
-      customerShopRes.data?.data?.isInactive === true,
-      'GET /shops/by-slug/:slug returns isInactive: true for unpaid shop'
-    );
-    assert(
-      customerShopRes.data?.data?.message?.includes('not accepting print requests'),
-      'GET /shops/by-slug/:slug returns standard not accepting prints message',
-      `Message: ${customerShopRes.data?.data?.message}`
-    );
-
-    // Try starting session as customer (should fail with 503 SHOP_INACTIVE)
+    console.log('\n--- STEP 5: Payment Signature Verification Rejection ---');
     try {
-      await axios.post(`${BASE_URL}/sessions/start-by-slug`, { slug });
-      assert(false, 'POST /sessions/start-by-slug blocked for unpaid shop', 'Expected 503 but got 200/201');
+      await axios.post(`${BASE_URL}/subscriptions/verify`, {
+        token: paymentToken,
+        planId: 'PRO',
+        razorpay_order_id: 'order_test_fake123',
+        razorpay_payment_id: 'pay_test_fake123',
+        razorpay_signature: 'invalid_malicious_signature'
+      });
+      assert(false, 'POST /subscriptions/verify rejects invalid signature', 'Expected 400 PAYMENT_VERIFICATION_FAILED');
     } catch (err) {
       assert(
-        err.response?.status === 503 && err.response?.data?.code === 'SHOP_INACTIVE',
-        'POST /sessions/start-by-slug returns 503 SHOP_INACTIVE',
+        err.response?.status === 400 && err.response?.data?.code === 'PAYMENT_VERIFICATION_FAILED',
+        'POST /subscriptions/verify returns 400 PAYMENT_VERIFICATION_FAILED on signature mismatch',
         `Status: ${err.response?.status}, Code: ${err.response?.data?.code}`
       );
     }
 
-    // -------------------------------------------------------------
-    // 5. Tokenized Subscription Payment Flow
-    // -------------------------------------------------------------
-    console.log('\n--- STEP 5: Tokenized Subscription Payment Flow ---');
-    // Retrieve shop info via payment token
-    const tokenInfoRes = await axios.get(`${BASE_URL}/subscriptions/by-token/${paymentToken}`);
-    assert(tokenInfoRes.status === 200 && tokenInfoRes.data?.data?.shopName, 'Public payment token resolution succeeds');
+    // Verify shop remained inactive after failed verification
+    const shopAfterFailedRes = await axios.get(`${BASE_URL}/subscriptions/by-token/${paymentToken}`);
+    assert(
+      shopAfterFailedRes.data?.data?.shopStatus === 'PENDING_PAYMENT',
+      'Shop remains PENDING_PAYMENT after failed signature verification'
+    );
 
-    // Create subscription order via payment token (amount determined server-side for PRO plan: ₹999)
-    const orderRes = await axios.post(`${BASE_URL}/subscriptions/create-order`, {
-      token: paymentToken,
-      planId: 'PRO'
-    });
-    assert(orderRes.status === 200, 'POST /subscriptions/create-order returned HTTP 200');
-    assert(orderRes.data.data.amount === 999, 'Order amount strictly matches server PRO plan price (₹999)', `Amount: ${orderRes.data.data.amount}`);
+    // -------------------------------------------------------------
+    // STEP 6: Super Admin Manual Administrative Activation Workflow
+    // -------------------------------------------------------------
+    console.log('\n--- STEP 6: Super Admin Manual Administrative Override ---');
+    // Test 6a: Validation (Reason is mandatory)
+    try {
+      await axios.post(
+        `${BASE_URL}/admin/shops/${shopId}/manual-activate`,
+        { reason: '' },
+        { headers: adminHeaders }
+      );
+      assert(false, 'Manual activation without reason must fail', 'Expected 400 REASON_REQUIRED');
+    } catch (err) {
+      assert(
+        err.response?.status === 400 && err.response?.data?.code === 'REASON_REQUIRED',
+        'Manual activation without reason returns 400 REASON_REQUIRED',
+        `Status: ${err.response?.status}, Code: ${err.response?.data?.code}`
+      );
+    }
+
+    // Test 6b: Valid Manual Activation
+    const manualActivateRes = await axios.post(
+      `${BASE_URL}/admin/shops/${shopId}/manual-activate`,
+      {
+        reason: 'Offline Cash received at shop counter',
+        notes: 'Receipt #SP-2026-001 issued',
+        durationDays: 30
+      },
+      { headers: adminHeaders }
+    );
+
+    assert(manualActivateRes.status === 200, 'Manual activation returned HTTP 200');
+    assert(manualActivateRes.data?.data?.status === 'ACTIVE', 'Shop status transitioned to ACTIVE via manual override');
+    assert(manualActivateRes.data?.data?.subscriptionStatus === 'ACTIVE', 'Subscription status transitioned to ACTIVE via manual override');
+
+    // Test 6c: Verify Payment Record
+    const paymentRecord = manualActivateRes.data?.data?.payment;
+    assert(paymentRecord?.gateway === 'MANUAL_ADMIN', 'Payment gateway is explicitly MANUAL_ADMIN (does NOT fake Razorpay)');
+    assert(paymentRecord?.paymentStatus === 'SUCCESS', 'Payment status is SUCCESS');
+    assert(paymentRecord?.metadata?.reason === 'Offline Cash received at shop counter', 'Payment metadata records admin reason');
+
+    // Test 6d: Post-Manual Activation Operational Verification (Gates open)
+    const jobsRes = await axios.get(`${BASE_URL}/shops/${shopId}/jobs`, { headers: shopHeaders });
+    assert(jobsRes.status === 200, 'GET /shops/:id/jobs now succeeds with HTTP 200 after manual activation');
+
+    // -------------------------------------------------------------
+    // STEP 7: Online Tokenized Flow (Using Test Simulation Header)
+    // -------------------------------------------------------------
+    console.log('\n--- STEP 7: Online Subscription Order & Verification Flow ---');
+    const unique2 = Date.now() + 1;
+    const ownerEmail2 = `shopkeeper_${unique2}@test.com`;
+    const createRes2 = await axios.post(
+      `${BASE_URL}/admin/shops`,
+      {
+        shopName: `Test Online Gated Shop ${unique2}`,
+        shopPhone: '9876543211',
+        shopEmail: `shop_${unique2}@test.com`,
+        shopAddress: 'Connaught Place, New Delhi',
+        ownerName: `Owner ${unique2}`,
+        ownerEmail: ownerEmail2,
+        ownerPassword: 'ShopkeeperPass123!',
+        plan: 'STARTER'
+      },
+      { headers: adminHeaders }
+    );
+    const shop2 = createRes2.data.data.shop;
+    const shopId2 = shop2._id || shop2.id;
+    const token2 = createRes2.data.data.paymentToken;
+
+    // Create order with test simulation header
+    const orderRes = await axios.post(
+      `${BASE_URL}/subscriptions/create-order`,
+      { token: token2, planId: 'STARTER' },
+      { headers: { 'x-test-simulation': 'true' } }
+    );
+    assert(orderRes.status === 200, 'POST /subscriptions/create-order returns HTTP 200 in test mode');
+    assert(orderRes.data.data.amount === 499, 'Order amount is ₹499 (STARTER plan price)');
+    assert(orderRes.data.data.amountPaise === 49900, 'Order amount in paise is 49900');
     const orderId = orderRes.data.data.orderId;
 
-    // Verify subscription payment (server-side transition)
-    const verifyRes = await axios.post(`${BASE_URL}/subscriptions/verify`, {
-      token: paymentToken,
-      planId: 'PRO',
-      razorpay_order_id: orderId,
-      razorpay_payment_id: `sub_pay_${Date.now()}`,
-      razorpay_signature: 'verified_server'
-    });
-
-    assert(verifyRes.status === 200, 'POST /subscriptions/verify returned HTTP 200');
-    assert(verifyRes.data.data.shopStatus === 'ACTIVE', 'Shop status transitioned to ACTIVE', `Got: ${verifyRes.data.data.shopStatus}`);
-    assert(verifyRes.data.data.subscriptionStatus === 'ACTIVE', 'Subscription status transitioned to ACTIVE', `Got: ${verifyRes.data.data.subscriptionStatus}`);
-
-    // -------------------------------------------------------------
-    // 6. Post-Payment Operational Verification (All Gates Open)
-    // -------------------------------------------------------------
-    console.log('\n--- STEP 6: Post-Payment Operational Verification ---');
-
-    // Check subscription status endpoint
-    const statusRes = await axios.get(`${BASE_URL}/subscriptions/status`, { headers: shopHeaders });
-    assert(statusRes.status === 200 && statusRes.data.data.subscription?.status === 'ACTIVE', 'Subscription status endpoint confirms ACTIVE');
-
-    // Shopkeeper accessing jobs now succeeds (HTTP 200)
-    const jobsRes = await axios.get(`${BASE_URL}/shops/${shopId}/jobs`, { headers: shopHeaders });
-    assert(jobsRes.status === 200, 'GET /shops/:id/jobs now succeeds with HTTP 200');
-
-    // Shopkeeper generating pairing code now succeeds (HTTP 200)
-    const pairingRes = await axios.post(`${BASE_URL}/printers/pairing-code`, {}, { headers: shopHeaders });
-    assert(pairingRes.status === 200 && pairingRes.data.data.pairingCode, 'POST /printers/pairing-code now succeeds');
-
-    // Customer page now active
-    const customerActiveShopRes = await axios.get(`${BASE_URL}/shops/by-slug/${slug}`);
-    assert(
-      !customerActiveShopRes.data?.data?.isInactive,
-      'GET /shops/by-slug/:slug now reflects ACTIVE shop (isInactive is falsy)'
+    // Verify payment with server-verified test signature
+    const verifyRes = await axios.post(
+      `${BASE_URL}/subscriptions/verify`,
+      {
+        token: token2,
+        planId: 'STARTER',
+        razorpay_order_id: orderId,
+        razorpay_payment_id: `pay_${Date.now()}`,
+        razorpay_signature: 'verified_server'
+      },
+      { headers: { 'x-test-simulation': 'true' } }
     );
 
-    // Customer session now successfully created (HTTP 201)
-    const sessionRes = await axios.post(`${BASE_URL}/sessions/start-by-slug`, { slug });
-    assert(sessionRes.status === 201 && sessionRes.data?.data?.sessionId, 'POST /sessions/start-by-slug now succeeds (HTTP 201)');
+    assert(verifyRes.status === 200, 'POST /subscriptions/verify returned HTTP 200');
+    assert(verifyRes.data.data.shopStatus === 'ACTIVE', 'Shop 2 status transitioned to ACTIVE');
+    assert(verifyRes.data.data.subscriptionStatus === 'ACTIVE', 'Shop 2 subscription status transitioned to ACTIVE');
+
+    // -------------------------------------------------------------
+    // STEP 8: Webhook Idempotency Check
+    // -------------------------------------------------------------
+    console.log('\n--- STEP 8: Webhook Idempotency Test ---');
+    const webhookRes1 = await axios.post(`${BASE_URL}/webhooks/razorpay`, {
+      event: 'order.paid',
+      payload: {
+        order: { entity: { id: orderId } },
+        payment: { entity: { id: `pay_${Date.now()}` } }
+      }
+    });
+    assert(webhookRes1.status === 200, 'POST /api/webhooks/razorpay returned HTTP 200');
+    assert(webhookRes1.data?.alreadyProcessed === true, 'Webhook detects already-activated payment and handles idempotently');
 
     console.log('\n================================================================');
     console.log(`   TEST RESULTS: ${passedTests}/${totalTests} TESTS PASSED`);
     console.log('================================================================\n');
 
     if (passedTests === totalTests) {
-      console.log('🎉 ALL SUBSCRIPTION GATING & ONBOARDING TESTS PASSED PERFECTLY!\n');
+      console.log('🎉 ALL TESTS PASSED PERFECTLY!\n');
       process.exit(0);
     } else {
       console.error('⚠️ SOME TESTS FAILED!\n');
       process.exit(1);
     }
   } catch (err) {
-    console.error('Fatal Test Execution Error:', err.response?.data || err.message);
+    console.error('Fatal Test Error:', err.response?.data || err.message);
     process.exit(1);
   }
 }

@@ -125,13 +125,14 @@ async function runTests() {
     }
 
     // Activate Shop A subscription so operational features unlock
-    const subOrder = await axios.post(`${BASE_URL}/api/subscriptions/create-order`, { planId: 'PRO' }, { headers: { Authorization: `Bearer ${shopOwnerToken}` } });
+    const subHeaders = { Authorization: `Bearer ${shopOwnerToken}`, 'x-test-simulation': 'true' };
+    const subOrder = await axios.post(`${BASE_URL}/api/subscriptions/create-order`, { planId: 'PRO' }, { headers: subHeaders });
     await axios.post(`${BASE_URL}/api/subscriptions/verify`, {
       planId: 'PRO',
       razorpay_order_id: subOrder.data.data.orderId,
       razorpay_payment_id: `sub_pay_${testTimestamp}`,
       razorpay_signature: 'verified_server'
-    }, { headers: { Authorization: `Bearer ${shopOwnerToken}` } });
+    }, { headers: subHeaders });
     assert(true, 'Shop A subscription activated successfully');
 
     // 2.5 Super Admin login check

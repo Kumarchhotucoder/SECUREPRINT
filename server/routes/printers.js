@@ -76,21 +76,44 @@ router.get('/', authenticate, requireShopkeeper, requireActiveSubscription, asyn
 
     const [printers, agents] = await Promise.all([
       Printer.find({ shopId: shop._id }).populate('agentId', 'computerName os status lastSeenAt appVersion'),
-      Agent.find({ shopId: shop._id }).sort({ lastSeenAt: -1 })
+      Agent.find({ shopId: shop._id, status: { $ne: 'UNPAIRED' } }).sort({ lastSeenAt: -1 })
     ]);
 
     const activeAgent = agents.find(a => a.status === 'ONLINE' && (Date.now() - new Date(a.lastSeenAt).getTime() < 3 * 60 * 1000)) || null;
 
+    // Attach printer count to each agent
+    const agentsWithCounts = agents.map(agent => {
+      const count = printers.filter(p => p.agentId && p.agentId._id && p.agentId._id.toString() === agent._id.toString()).length;
+      return {
+        _id: agent._id,
+        agentId: agent.agentId,
+        computerName: agent.computerName,
+        os: agent.os,
+        appVersion: agent.appVersion,
+        status: agent.status,
+        lastSeenAt: agent.lastSeenAt,
+        printerCount: count
+      };
+    });
+
+    // Partition printers into connected (registered) and available (discovered)
+    const connectedPrinters = printers.filter(p => p.isRegistered);
+    const availablePrinters = printers.filter(p => !p.isRegistered);
+
     res.json({
       success: true,
       data: {
-        printers,
-        agents,
+        printers: connectedPrinters,
+        connectedPrinters,
+        availablePrinters,
+        allPrinters: printers,
+        agents: agentsWithCounts,
         isAgentOnline: Boolean(activeAgent),
         activeAgent: activeAgent ? {
           agentId: activeAgent.agentId,
           computerName: activeAgent.computerName,
           status: activeAgent.status,
+          os: activeAgent.os,
           lastSeenAt: activeAgent.lastSeenAt
         } : null
       }
@@ -231,10 +254,13 @@ router.post('/sync', authenticateAgent, async (req, res, next) => {
     agent.lastSeenAt = new Date();
     await agent.save();
 
-    const registeredPrinters = [];
+    const syncedPrinters = [];
+    const discoveredSystemNames = new Set();
+
     for (const p of printers) {
       const systemPrinterName = p.systemPrinterName || p.name;
       if (!systemPrinterName) continue;
+      discoveredSystemNames.add(systemPrinterName);
 
       let printer = await Printer.findOne({ agentId: agent._id, systemPrinterName });
       if (!printer) {
@@ -244,9 +270,20 @@ router.post('/sync', authenticateAgent, async (req, res, next) => {
           agentId: agent._id,
           systemPrinterName,
           name: p.name || systemPrinterName,
+          manufacturer: p.manufacturer || '',
+          model: p.model || '',
+          deviceIdentifier: p.deviceIdentifier || p.deviceUri || systemPrinterName,
           connectionType: p.connectionType || 'WINDOWS_INSTALLED',
+          isRegistered: p.isRegistered !== undefined ? Boolean(p.isRegistered) : true,
+          registeredAt: p.isRegistered !== false ? new Date() : undefined,
           isColorCapable: Boolean(p.isColorCapable || p.capabilities?.color),
           supportsDuplex: Boolean(p.supportsDuplex || p.capabilities?.duplex),
+          capabilities: {
+            color_supported: Boolean(p.isColorCapable || p.capabilities?.color),
+            duplex_supported: Boolean(p.supportsDuplex || p.capabilities?.duplex),
+            paper_sizes: (p.paperSizes && p.paperSizes.length) ? p.paperSizes : (p.capabilities?.paperSizes || ['A4', 'Letter']),
+            max_copies: p.capabilities?.maxCopies || 99
+          },
           paperSizes: (p.paperSizes && p.paperSizes.length) ? p.paperSizes : (p.capabilities?.paperSizes || ['A4', 'Letter']),
           isDefault: Boolean(p.isDefault),
           status: p.status || 'READY',
@@ -257,6 +294,10 @@ router.post('/sync', authenticateAgent, async (req, res, next) => {
         printer.status = p.status || 'READY';
         printer.statusDetails = p.statusDetails || '';
         printer.connectionType = p.connectionType || printer.connectionType;
+        if (p.manufacturer) printer.manufacturer = p.manufacturer;
+        if (p.model) printer.model = p.model;
+        if (p.deviceIdentifier) printer.deviceIdentifier = p.deviceIdentifier;
+        if (p.isRegistered !== undefined) printer.isRegistered = Boolean(p.isRegistered);
         if (p.isColorCapable !== undefined || p.capabilities?.color !== undefined) {
           printer.isColorCapable = Boolean(p.isColorCapable || p.capabilities?.color);
         }
@@ -268,7 +309,7 @@ router.post('/sync', authenticateAgent, async (req, res, next) => {
         printer.lastSeenAt = new Date();
       }
       await printer.save();
-      registeredPrinters.push(printer);
+      syncedPrinters.push(printer);
     }
 
     // Broadcast update to shop dashboard
@@ -277,16 +318,183 @@ router.post('/sync', authenticateAgent, async (req, res, next) => {
       io.to(`shop-${shopId.toString()}`).emit('printers-updated', {
         agentId: agent.agentId,
         computerName: agent.computerName,
-        printers: registeredPrinters
+        printers: syncedPrinters
       });
     }
 
     res.json({
       success: true,
       data: {
-        syncedCount: registeredPrinters.length,
-        printers: registeredPrinters
+        syncedCount: syncedPrinters.length,
+        printers: syncedPrinters
       }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── 4.1 POST /api/printers/discover — On-demand printer discovery trigger (requires active subscription)
+router.post('/discover', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
+  try {
+    const shop = await Shop.findOne({ ownerId: req.user._id });
+    if (!shop) return res.status(404).json({ success: false, message: 'Shop not found.' });
+
+    const activeAgent = await Agent.findOne({
+      shopId: shop._id,
+      status: 'ONLINE',
+      lastSeenAt: { $gt: new Date(Date.now() - 3 * 60 * 1000) }
+    }).sort({ lastSeenAt: -1 });
+
+    if (!activeAgent) {
+      return res.status(400).json({
+        success: false,
+        code: 'AGENT_OFFLINE',
+        message: 'No active shop computer connected. Start SecurePrint Agent to discover printers.'
+      });
+    }
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`agent-${activeAgent.agentId}`).emit('discover-printers');
+    }
+
+    res.json({
+      success: true,
+      data: {
+        agentId: activeAgent.agentId,
+        computerName: activeAgent.computerName,
+        message: 'Printer discovery scan dispatched to shop computer.'
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── 4.2 POST /api/printers/:id/connect — Bluetooth-like connect/register flow (requires active subscription)
+router.post('/:id/connect', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
+  try {
+    const shop = await Shop.findOne({ ownerId: req.user._id });
+    if (!shop) return res.status(404).json({ success: false, message: 'Shop not found.' });
+
+    const printer = await findShopPrinter(req.params.id, shop._id, true);
+    if (!printer) return res.status(404).json({ success: false, message: 'Printer not found.' });
+
+    const agent = printer.agentId;
+    const isAgentOnline = agent && agent.status === 'ONLINE' && (Date.now() - new Date(agent.lastSeenAt || 0).getTime() < 3 * 60 * 1000);
+
+    printer.isRegistered = true;
+    printer.isEnabled = true;
+    printer.status = isAgentOnline ? 'READY' : 'OFFLINE';
+    printer.registeredAt = new Date();
+    await printer.save();
+
+    await logEvent('PRINTER_CONNECTED', {
+      shopId: shop._id,
+      userId: req.user._id,
+      metadata: { printerId: printer.printerId, name: printer.name, connectionType: printer.connectionType }
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`shop-${shop._id.toString()}`).emit('printer-connected', {
+        printerId: printer.printerId,
+        name: printer.name,
+        status: printer.status
+      });
+      io.to(`shop-${shop._id.toString()}`).emit('printers-updated');
+    }
+
+    res.json({
+      success: true,
+      data: printer,
+      message: `Printer "${printer.name}" connected and ready for printing!`
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── 4.3 POST /api/printers/:id/disconnect — Unregister printer from SecurePrint (does NOT delete from Windows)
+router.post('/:id/disconnect', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
+  try {
+    const shop = await Shop.findOne({ ownerId: req.user._id });
+    if (!shop) return res.status(404).json({ success: false, message: 'Shop not found.' });
+
+    const printer = await findShopPrinter(req.params.id, shop._id);
+    if (!printer) return res.status(404).json({ success: false, message: 'Printer not found.' });
+
+    printer.isRegistered = false;
+    printer.status = 'DISCONNECTED';
+    if (printer.isDefault) {
+      printer.isDefault = false;
+    }
+    await printer.save();
+
+    await logEvent('PRINTER_DISCONNECTED', {
+      shopId: shop._id,
+      userId: req.user._id,
+      metadata: { printerId: printer.printerId, name: printer.name }
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`shop-${shop._id.toString()}`).emit('printer-disconnected', {
+        printerId: printer.printerId,
+        name: printer.name
+      });
+      io.to(`shop-${shop._id.toString()}`).emit('printers-updated');
+    }
+
+    res.json({
+      success: true,
+      data: printer,
+      message: `Printer "${printer.name}" disconnected from SecurePrint.`
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── 4.4 POST /api/printers/agents/:id/unpair — Unpair a shop computer/agent (requires active subscription)
+router.post('/agents/:id/unpair', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
+  try {
+    const shop = await Shop.findOne({ ownerId: req.user._id });
+    if (!shop) return res.status(404).json({ success: false, message: 'Shop not found.' });
+
+    const agent = await Agent.findOne({
+      shopId: shop._id,
+      $or: [
+        { agentId: req.params.id },
+        ...(mongoose.Types.ObjectId.isValid(req.params.id) ? [{ _id: req.params.id }] : [])
+      ]
+    });
+    if (!agent) return res.status(404).json({ success: false, message: 'Computer agent not found.' });
+
+    agent.status = 'UNPAIRED';
+    agent.authTokenHash = undefined;
+    await agent.save();
+
+    // Mark all printers attached to this agent as OFFLINE / unregistered
+    await Printer.updateMany({ agentId: agent._id }, { status: 'OFFLINE', isRegistered: false });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`agent-${agent.agentId}`).emit('agent-unpaired', { message: 'Computer has been unpaired by shopkeeper.' });
+      io.to(`shop-${shop._id.toString()}`).emit('agent-status-changed', { agentId: agent.agentId, status: 'OFFLINE' });
+      io.to(`shop-${shop._id.toString()}`).emit('printers-updated');
+    }
+
+    await logEvent('AGENT_UNPAIRED', {
+      shopId: shop._id,
+      userId: req.user._id,
+      metadata: { agentId: agent.agentId, computerName: agent.computerName }
+    });
+
+    res.json({
+      success: true,
+      message: `Computer "${agent.computerName}" unpaired successfully.`
     });
   } catch (err) {
     next(err);
@@ -367,6 +575,16 @@ router.post('/jobs/:jobId/print', authenticate, requireShopkeeper, requireActive
         error: {
           code: 'NO_PRINTERS_FOUND',
           message: 'No connected printers found. Make sure your Shop Computer is running the SecurePrint Agent, or use Manual Print below.'
+        }
+      });
+    }
+
+    if (printer.isRegistered === false) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'PRINTER_NOT_CONNECTED',
+          message: `Selected printer "${printer.name}" is discovered but not connected to SecurePrint. Please click [Connect] first.`
         }
       });
     }

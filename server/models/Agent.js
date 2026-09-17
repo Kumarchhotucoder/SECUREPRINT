@@ -26,9 +26,13 @@ const agentSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  deviceIdentifier: {
+    type: String,
+    trim: true
+  },
   status: {
     type: String,
-    enum: ['ONLINE', 'OFFLINE'],
+    enum: ['ONLINE', 'OFFLINE', 'CONNECTING', 'UNPAIRED'],
     default: 'OFFLINE',
     index: true
   },

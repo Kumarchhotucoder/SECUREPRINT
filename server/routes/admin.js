@@ -7,6 +7,7 @@ const Shop = require('../models/Shop');
 const PrintJob = require('../models/PrintJob');
 const PrintSession = require('../models/PrintSession');
 const AuditLog = require('../models/AuditLog');
+const Payment = require('../models/Payment');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const { logEvent, getRequestMeta } = require('../utils/audit');
 const { getAppBaseUrl } = require('../utils/url');
@@ -395,6 +396,112 @@ router.patch('/shops/:id/toggle-active', async (req, res, next) => {
       data: shop
     });
   } catch (err) { next(err); }
+});
+
+// ── POST /api/admin/shops/:id/manual-activate ─────────────────
+/**
+ * Separate explicit administrative override workflow to manually activate a shop.
+ * Requires confirmation, reason, admin identity tracking, and immutable audit logging.
+ * NEVER fakes a Razorpay payment. Creates a distinct MANUAL_ADMIN payment record.
+ */
+router.post('/shops/:id/manual-activate', async (req, res, next) => {
+  try {
+    const { reason, notes, durationDays = 30 } = req.body;
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({
+        success: false,
+        code: 'REASON_REQUIRED',
+        message: 'A mandatory reason is required for manual administrative shop activation.'
+      });
+    }
+
+    const shop = await Shop.findById(req.params.id);
+    if (!shop) {
+      return res.status(404).json({ success: false, code: 'SHOP_NOT_FOUND', message: 'Shop not found.' });
+    }
+
+    const now = new Date();
+    const days = Number(durationDays) || 30;
+    const validUntil = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+    const monthlyPrice = shop.subscription?.monthlyPrice || 499;
+
+    // Create a distinct Payment record explicitly marking MANUAL_ADMIN
+    const payment = new Payment({
+      shopId: shop._id,
+      type: 'SHOP_SUBSCRIPTION',
+      amount: monthlyPrice,
+      currency: 'INR',
+      method: 'MANUAL',
+      gateway: 'MANUAL_ADMIN',
+      gatewayOrderId: `manual_override_${Date.now()}`,
+      gatewayPaymentId: `admin_${req.user._id.toString().slice(-6)}_${Date.now()}`,
+      paymentStatus: 'SUCCESS',
+      paidAt: now,
+      metadata: {
+        activatedByAdminId: req.user._id,
+        activatedByAdminEmail: req.user.email,
+        activatedByAdminName: req.user.name,
+        reason: reason.trim(),
+        notes: notes ? notes.trim() : '',
+        durationDays: days,
+        isAdministrativeOverride: true
+      }
+    });
+    await payment.save();
+
+    // Transition shop and subscription states
+    shop.status = 'ACTIVE';
+    shop.isActive = true;
+    if (!shop.subscription) shop.subscription = {};
+    shop.subscription.status = 'ACTIVE';
+    shop.subscription.startedAt = now;
+    shop.subscription.validUntil = validUntil;
+    shop.subscription.paymentId = payment._id;
+    await shop.save();
+
+    // Log explicit immutable audit event
+    await logEvent('ADMIN_MANUAL_SHOP_ACTIVATION', {
+      userId: req.user._id,
+      shopId: shop._id,
+      ...getRequestMeta(req),
+      metadata: {
+        adminEmail: req.user.email,
+        adminName: req.user.name,
+        shopName: shop.name,
+        reason: reason.trim(),
+        notes: notes ? notes.trim() : '',
+        validUntil,
+        paymentId: payment._id
+      }
+    });
+
+    // Notify connected shopkeeper client in real-time
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`shop-${shop._id}`).emit('subscription-activated', {
+        shopId: shop._id.toString(),
+        shopStatus: 'ACTIVE',
+        subscriptionStatus: 'ACTIVE',
+        validUntil,
+        source: 'MANUAL_ADMIN_OVERRIDE'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Shop "${shop.name}" has been manually activated via Administrative Override. Reason: ${reason.trim()}`,
+      data: {
+        shop,
+        payment,
+        status: 'ACTIVE',
+        subscriptionStatus: 'ACTIVE',
+        validUntil
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ── PATCH /api/admin/shops/:id/verify ─────────────────────────
