@@ -61,7 +61,13 @@ const printAttemptSchema = new mongoose.Schema({
     type: Date
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+printAttemptSchema.virtual('tenant_id').get(function () {
+  return this.shopId;
 });
 
 printAttemptSchema.index({ jobId: 1, createdAt: -1 });

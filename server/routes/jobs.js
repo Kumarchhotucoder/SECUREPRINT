@@ -7,9 +7,9 @@ const Shop = require('../models/Shop');
 const { hashToken, hashFileBuffer } = require('../utils/crypto');
 const { calculatePrice } = require('../utils/pricing');
 const { deleteSession, deleteJobFiles } = require('../utils/deletion');
-const { logEvent, getRequestMeta } = require('../utils/audit');
-const { authenticate, requireShopkeeper } = require('../middleware/auth');
+const { authenticate, requireShopkeeper, requireActiveSubscription } = require('../middleware/auth');
 const { getFileBuffer } = require('../utils/storage');
+const { logEvent, getRequestMeta } = require('../utils/audit');
 
 /**
  * Verify customer session access.
@@ -42,7 +42,16 @@ const verifyCustomerSession = async (req, res) => {
 // POST /api/jobs — create a print job from a session
 router.post('/', async (req, res, next) => {
   try {
-    const { sessionId, copies, colorMode, paperSize, duplex, pagesPerSheet } = req.body;
+    const opts = req.body.options || {};
+    const sessionId = req.body.sessionId || opts.sessionId;
+    const copies = req.body.copies !== undefined ? req.body.copies : (opts.copies !== undefined ? opts.copies : 1);
+    const colorMode = req.body.colorMode || opts.colorMode || 'BW';
+    const paperSize = req.body.paperSize || opts.paperSize || 'A4';
+    const duplex = req.body.duplex !== undefined ? req.body.duplex : (opts.duplex !== undefined ? opts.duplex : (opts.doubleSided || false));
+    const orientation = req.body.orientation || opts.orientation || 'PORTRAIT';
+    const pageRange = req.body.pageRange || opts.pageRange || 'ALL';
+    const pagesPerSheet = req.body.pagesPerSheet || opts.pagesPerSheet || 1;
+
     if (!sessionId) return res.status(400).json({ success: false, message: 'Session ID is required.' });
 
     const session = await verifyCustomerSession(req, res);
@@ -55,6 +64,16 @@ router.post('/', async (req, res, next) => {
     }
 
     const shop = await Shop.findById(session.shopId);
+    const isOperational = shop && shop.status === 'ACTIVE' && shop.isActive && shop.subscription?.status === 'ACTIVE';
+    if (!isOperational) {
+      return res.status(503).json({
+        success: false,
+        isInactive: true,
+        code: 'SHOP_INACTIVE',
+        message: 'This shop is currently not accepting print requests. Please try again later.'
+      });
+    }
+
     const totalPages = docs.reduce((sum, d) => sum + d.pageCount, 0);
 
     const pricing = calculatePrice({
@@ -76,6 +95,8 @@ router.post('/', async (req, res, next) => {
       colorMode: colorMode || 'BW',
       paperSize: paperSize || 'A4',
       duplex: duplex || false,
+      orientation: orientation || 'PORTRAIT',
+      pageRange: pageRange || 'ALL',
       pagesPerSheet: pagesPerSheet || 1,
       totalFiles: docs.length,
       totalPages,
@@ -120,7 +141,12 @@ router.post('/', async (req, res, next) => {
         totalFiles: job.totalFiles,
         totalPages: job.totalPages,
         estimatedPrice: job.estimatedPrice,
-        currency: pricing.currency
+        currency: pricing.currency,
+        copies: job.copies,
+        orientation: job.orientation,
+        pageRange: job.pageRange,
+        colorMode: job.colorMode,
+        paperSize: job.paperSize
       }
     });
   } catch (err) {
@@ -167,10 +193,15 @@ router.get('/:id', async (req, res, next) => {
 
     await logEvent('JOB_ACCESSED', { jobId: job._id, ...getRequestMeta(req) });
 
+    const jobObj = job.toObject();
+    if (jobObj.shopId) {
+      jobObj.shopId.upiId = jobObj.shopId.upiId || (jobObj.shopId.slug ? `${jobObj.shopId.slug}@upi` : 'counter@upi');
+    }
+
     res.json({
       success: true,
       data: {
-        ...job.toObject(),
+        ...jobObj,
         documents: docs
       }
     });
@@ -179,8 +210,113 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-// POST /api/jobs/:id/receive — shopkeeper marks job as RECEIVED
-router.post('/:id/receive', authenticate, requireShopkeeper, async (req, res, next) => {
+// GET /api/jobs/:id/preview — stream primary document inline for manual browser printing
+router.get('/:id/preview', async (req, res, next) => {
+  try {
+    const job = await PrintJob.findById(req.params.id)
+      .populate('sessionId')
+      .populate('shopId');
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'JOB_NOT_FOUND', message: 'Print job not found.' }
+      });
+    }
+
+    // Critical Document Lifecycle Check (Part G & Q)
+    if (job.filesDeleted || job.deletedAt || job.status === 'DELETED') {
+      return res.status(410).json({
+        success: false,
+        error: {
+          code: 'DOCUMENT_ALREADY_DELETED',
+          message: 'Document has already been deleted for privacy and cannot be printed again.'
+        }
+      });
+    }
+
+    // Authorization: customer (sessionToken / x-session-token) OR shopkeeper (JWT in authHeader, or query ?token= / ?jwt=)
+    const rawSessionToken = req.query.sessionToken || req.headers['x-session-token'];
+    const passedToken = req.query.token || req.query.jwt;
+    const authHeader = req.headers['authorization'] || (passedToken && passedToken.startsWith('ey') ? `Bearer ${passedToken}` : null);
+
+    // If passedToken doesn't look like JWT, also test as rawSessionToken
+    const sessionCandidate = rawSessionToken || (passedToken && !passedToken.startsWith('ey') ? passedToken : null);
+
+    let isAuthorized = false;
+
+    if (sessionCandidate) {
+      const tokenHash = hashToken(sessionCandidate);
+      const session = await PrintSession.findOne({ _id: job.sessionId._id || job.sessionId, secureTokenHash: tokenHash });
+      if (session && !session.isExpired() && !['DELETED', 'CANCELLED'].includes(session.status)) {
+        isAuthorized = true;
+      }
+    }
+
+    if (!isAuthorized && (authHeader || (passedToken && passedToken.startsWith('ey')))) {
+      const { verifyAccessToken } = require('../utils/jwt');
+      const token = authHeader ? authHeader.replace(/^Bearer\s+/i, '') : passedToken;
+      try {
+        const decoded = verifyAccessToken(token);
+        if (decoded.role === 'SUPER_ADMIN') {
+          isAuthorized = true;
+        } else {
+          const shop = await Shop.findOne({ _id: job.shopId._id || job.shopId, ownerId: decoded.userId });
+          if (shop) isAuthorized = true;
+        }
+      } catch (e) {
+        // invalid token
+      }
+    }
+
+    if (!isAuthorized) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Access denied: You are not authorized to preview this job.' }
+      });
+    }
+
+    // Find documents for this session
+    const docs = await Document.find({ sessionId: job.sessionId._id || job.sessionId, deletedAt: null }).select('+storagePath').sort({ displayOrder: 1 });
+    if (!docs || docs.length === 0) {
+      return res.status(410).json({
+        success: false,
+        error: {
+          code: 'DOCUMENT_ALREADY_DELETED',
+          message: 'Document has already been deleted for privacy and cannot be printed again.'
+        }
+      });
+    }
+
+    const primaryDoc = docs[0];
+    const { verifyFileDeleted, getFileStream } = require('../utils/storage');
+
+    if (!primaryDoc.storagePath || verifyFileDeleted(primaryDoc.storagePath)) {
+      return res.status(410).json({
+        success: false,
+        error: {
+          code: 'DOCUMENT_ALREADY_DELETED',
+          message: 'Document file has been permanently deleted from storage.'
+        }
+      });
+    }
+
+    // Stream document inline
+    res.setHeader('Content-Type', primaryDoc.mimeType || 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(primaryDoc.originalFilename || 'document.pdf')}"`);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+
+    const stream = getFileStream(primaryDoc.storagePath);
+    stream.pipe(res);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/jobs/:id/receive — shopkeeper marks job as RECEIVED (requires active subscription)
+router.post('/:id/receive', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
   try {
     const job = await PrintJob.findById(req.params.id);
     if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
@@ -209,8 +345,8 @@ router.post('/:id/receive', authenticate, requireShopkeeper, async (req, res, ne
   }
 });
 
-// POST /api/jobs/:id/print — shopkeeper starts printing
-router.post('/:id/print', authenticate, requireShopkeeper, async (req, res, next) => {
+// POST /api/jobs/:id/print — shopkeeper starts printing (requires active subscription)
+router.post('/:id/print', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
   try {
     const job = await PrintJob.findById(req.params.id).populate('sessionId');
     if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
@@ -218,8 +354,30 @@ router.post('/:id/print', authenticate, requireShopkeeper, async (req, res, next
     const shop = await Shop.findOne({ _id: job.shopId, ownerId: req.user._id });
     if (!shop) return res.status(403).json({ success: false, message: 'Access denied.' });
 
+    // Check if files deleted
+    if (job.filesDeleted || job.deletedAt || job.status === 'DELETED') {
+      return res.status(410).json({
+        success: false,
+        error: {
+          code: 'DOCUMENT_ALREADY_DELETED',
+          message: 'Document has already been deleted for privacy and cannot be printed again.'
+        }
+      });
+    }
+
+    // Idempotent: if already printing, return success
+    if (job.status === 'PRINTING') {
+      return res.json({ success: true, data: { status: job.status, message: 'Job is already in printing status.' } });
+    }
+
     if (!['READY', 'RECEIVED'].includes(job.status)) {
-      return res.status(400).json({ success: false, message: `Cannot print job in ${job.status} status.` });
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_STATUS',
+          message: `Cannot print job in ${job.status} status.`
+        }
+      });
     }
 
     // Integrity check: verify document hashes haven't changed
@@ -269,51 +427,72 @@ router.post('/:id/print', authenticate, requireShopkeeper, async (req, res, next
   }
 });
 
-// POST /api/jobs/:id/complete — shopkeeper marks job complete
-router.post('/:id/complete', authenticate, requireShopkeeper, async (req, res, next) => {
+// POST /api/jobs/:id/complete — shopkeeper marks job complete (requires active subscription)
+router.post('/:id/complete', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
   try {
     const { finalPrice, note } = req.body || {};
     const job = await PrintJob.findById(req.params.id);
     if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
 
     const shop = await Shop.findOne({ _id: job.shopId, ownerId: req.user._id });
-    if (!shop) return res.status(403).json({ success: false, message: 'Access denied.' });
+    if (!shop) return res.status(403).json({ success: false, message: 'Access denied: Job belongs to another tenant.' });
 
-    if (!['READY', 'PRINTING'].includes(job.status)) {
-      return res.status(400).json({ success: false, message: `Job must be in READY or PRINTING status to complete.` });
+    if (['CANCELLED', 'EXPIRED', 'FAILED'].includes(job.status)) {
+      return res.status(400).json({ success: false, message: `Cannot complete job in ${job.status} status.` });
+    }
+
+    if (['COMPLETED', 'JOB_CLOSED'].includes(job.status) && job.paymentStatus === 'PAID') {
+      return res.status(400).json({ success: false, message: 'Job is already completed.' });
+    }
+
+    // Check that document still exists and has not been deleted
+    const docExists = await Document.findOne({ sessionId: job.sessionId, deletedAt: null });
+    if (!docExists || job.filesDeleted) {
+      return res.status(400).json({
+        success: false,
+        message: 'Your document was deleted for privacy. Please upload it again to print.'
+      });
+    }
+
+    if (!['READY', 'REQUEST_SENT', 'RECEIVED', 'SHOP_RECEIVED', 'PRINTING'].includes(job.status)) {
+      return res.status(400).json({ success: false, message: `Job must be in PRINTING or valid prior status to mark complete.` });
     }
 
     const completionTime = new Date();
-    job.status = 'AWAITING_PAYMENT';
+    job.status = 'PRINTING_COMPLETED';
     job.completedAt = completionTime;
     job.finalPrice = finalPrice || job.estimatedPrice;
-    job.paymentStatus = job.paymentStatus || 'PENDING';
+    job.paymentStatus = 'AWAITING_PAYMENT';
     job.filesDeleted = false;
     if (note) job.shopNote = note;
-    job.statusHistory.push({ status: 'AWAITING_PAYMENT', timestamp: completionTime, note: 'Printing completed. Awaiting customer payment.' });
+    job.statusHistory.push({
+      status: 'PRINTING_COMPLETED',
+      timestamp: completionTime,
+      note: 'Printing completed by shopkeeper. Awaiting customer payment.'
+    });
     await job.save();
 
     await logEvent('JOB_PRINTING_COMPLETED', { jobId: job._id, shopId: shop._id, ...getRequestMeta(req) });
 
     const io = req.app.get('io');
     if (io) {
-      // Notify customer status page to show [ PAY NOW ]
+      // Notify customer status page in real time to unlock payment
       io.to(`job-${job._id}`).emit('job-status', {
         jobId: job._id.toString(),
-        status: 'AWAITING_PAYMENT',
+        status: 'PRINTING_COMPLETED',
+        paymentStatus: 'AWAITING_PAYMENT',
         shopName: shop.name,
         finalPrice: job.finalPrice,
         completedAt: job.completedAt,
-        paymentStatus: 'PENDING',
         filesDeleted: false,
-        message: 'Your printing is completed. Please complete the payment to the shop.'
+        message: 'Printing completed. Please complete payment.'
       });
 
       // Update shopkeeper dashboard card
       io.to(`shop-${job.shopId}`).emit('job-updated', {
         jobId: job._id.toString(),
-        status: 'AWAITING_PAYMENT',
-        paymentStatus: 'PENDING',
+        status: 'PRINTING_COMPLETED',
+        paymentStatus: 'AWAITING_PAYMENT',
         completedAt: job.completedAt,
         finalPrice: job.finalPrice,
         filesDeleted: false
@@ -338,8 +517,8 @@ router.post('/:id/complete', authenticate, requireShopkeeper, async (req, res, n
   }
 });
 
-// POST /api/jobs/:id/cleanup-retry — safely retry physical file deletion if previously failed
-router.post('/:id/cleanup-retry', authenticate, requireShopkeeper, async (req, res, next) => {
+// POST /api/jobs/:id/cleanup-retry — safely retry physical file deletion if previously failed (requires active subscription)
+router.post('/:id/cleanup-retry', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
   try {
     const job = await PrintJob.findById(req.params.id);
     if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });

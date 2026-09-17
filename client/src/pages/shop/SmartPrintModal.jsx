@@ -9,6 +9,7 @@ import api from '../../lib/api'
 export default function SmartPrintModal({ job, onClose, onJobUpdated, socket }) {
   const [printers, setPrinters] = useState([])
   const [loadingPrinters, setLoadingPrinters] = useState(true)
+  const [isAgentOnline, setIsAgentOnline] = useState(false)
   const [selectedPrinterId, setSelectedPrinterId] = useState('')
   const [colorMode, setColorMode] = useState(job.colorMode || 'BW')
   const [copies, setCopies] = useState(job.copies || 1)
@@ -17,6 +18,9 @@ export default function SmartPrintModal({ job, onClose, onJobUpdated, socket }) 
 
   const [printingStatus, setPrintingStatus] = useState(null) // null | 'SENDING' | 'DOWNLOADING' | 'SUBMITTED' | 'PRINT_COMPLETED' | 'FAILED'
   const [statusMessage, setStatusMessage] = useState('')
+  const [popupBlockedUrl, setPopupBlockedUrl] = useState(null)
+
+  const isDeleted = Boolean(job.filesDeleted || job.deletedAt)
 
   useEffect(() => {
     const fetchPrinters = async () => {
@@ -25,7 +29,10 @@ export default function SmartPrintModal({ job, onClose, onJobUpdated, socket }) 
         const res = await api.get('/printers')
         if (res.data?.success) {
           const list = res.data.data.printers || []
+          const agentOnline = Boolean(res.data.data.isAgentOnline)
           setPrinters(list)
+          setIsAgentOnline(agentOnline)
+
           // Preselect default or first ready printer
           const def = list.find(p => p.isDefault) || list.find(p => p.status === 'READY') || list[0]
           if (def) {
@@ -37,7 +44,7 @@ export default function SmartPrintModal({ job, onClose, onJobUpdated, socket }) 
           }
         }
       } catch (err) {
-        console.error(err)
+        console.error('Failed to fetch printers:', err)
       } finally {
         setLoadingPrinters(false)
       }
@@ -89,8 +96,18 @@ export default function SmartPrintModal({ job, onClose, onJobUpdated, socket }) 
   }, [socket, job._id, onJobUpdated, onClose])
 
   const handleSendToPhysicalPrinter = async () => {
+    if (isDeleted) {
+      toast.error('Document has already been deleted for privacy and cannot be printed again.')
+      return
+    }
+
+    if (!isAgentOnline) {
+      toast.error('SecurePrint Agent is offline. Please launch the agent on the shop computer.')
+      return
+    }
+
     if (!selectedPrinterId) {
-      toast.error('Please select a printer')
+      toast.error('Please select a hardware printer')
       return
     }
 
@@ -120,16 +137,36 @@ export default function SmartPrintModal({ job, onClose, onJobUpdated, socket }) 
   }
 
   const handleManualFallback = async () => {
+    if (isDeleted) {
+      toast.error('Document has already been deleted for privacy and cannot be printed again.')
+      return
+    }
+
     try {
-      // Mark as printing in SaaS
-      await api.post(`/jobs/${job._id}/print`)
-      if (onJobUpdated) onJobUpdated(job._id, 'print')
-      // Open preview in browser
-      window.open(`/api/jobs/${job._id}/preview`, '_blank')
-      toast.success('Job opened for manual printing')
-      onClose()
+      // Mark as printing in SaaS (non-fatal if already transitioning)
+      try {
+        await api.post(`/jobs/${job._id}/print`)
+        if (onJobUpdated) onJobUpdated(job._id, 'print')
+      } catch (err) {
+        // Continue to preview even if status was already updated
+        console.warn('Job status update notice:', err.response?.data?.message)
+      }
+
+      // Include auth token query parameter so browser preview tab can authenticate reliably
+      const token = localStorage.getItem('secureprint_token') || ''
+      const previewUrl = `/api/jobs/${job._id}/preview?token=${encodeURIComponent(token)}`
+
+      // Attempt to open preview window
+      const win = window.open(previewUrl, '_blank')
+      if (!win || win.closed || typeof win.closed === 'undefined') {
+        setPopupBlockedUrl(previewUrl)
+        toast('Popup blocked by browser. Click "Open Print Preview" below.', { icon: '⚠️' })
+      } else {
+        toast.success('Document opened in preview. Press Ctrl+P or Cmd+P to print.')
+        setPopupBlockedUrl(null)
+      }
     } catch (err) {
-      toast.error('Failed to trigger manual print')
+      toast.error(err.response?.data?.message || 'Failed to open preview for manual printing')
     }
   }
 
@@ -177,6 +214,25 @@ export default function SmartPrintModal({ job, onClose, onJobUpdated, socket }) 
           </div>
         )}
 
+        {/* Privacy Deletion Notice */}
+        {isDeleted && (
+          <div style={{
+            background: '#FEF2F2',
+            border: '1.5px solid #DC2626',
+            borderRadius: 'var(--radius-md)',
+            padding: '12px 14px',
+            marginBottom: 16,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12
+          }}>
+            <AlertCircle size={22} color="#DC2626" style={{ flexShrink: 0 }} />
+            <div style={{ fontSize: 'var(--font-size-sm)', color: '#991B1B', fontWeight: 600 }}>
+              Document has already been deleted for privacy and cannot be printed again.
+            </div>
+          </div>
+        )}
+
         {/* Step 1: Printer Selection */}
         <div style={{ marginBottom: 16 }}>
           <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6 }}>
@@ -185,6 +241,17 @@ export default function SmartPrintModal({ job, onClose, onJobUpdated, socket }) 
           
           {loadingPrinters ? (
             <div style={{ padding: 12, textAlign: 'center', fontSize: 'var(--font-size-xs)' }}>Loading printers...</div>
+          ) : !isAgentOnline ? (
+            <div style={{
+              background: '#FEF2F2',
+              border: '1px solid #FCA5A5',
+              borderRadius: 'var(--radius-md)',
+              padding: 12,
+              fontSize: 'var(--font-size-xs)',
+              color: '#991B1B'
+            }}>
+              ⚠️ <strong>SecurePrint Agent is Offline.</strong> Please launch the agent on the shop computer to enable automated physical printing, or use <b>Manual Browser Print</b> below.
+            </div>
           ) : printers.length === 0 ? (
             <div style={{
               background: '#FFFBEB',
@@ -194,12 +261,13 @@ export default function SmartPrintModal({ job, onClose, onJobUpdated, socket }) 
               fontSize: 'var(--font-size-xs)',
               color: '#92400E'
             }}>
-              ⚠️ No connected printers found. Make sure your Shop Computer is running the SecurePrint Agent, or use <b>Manual Print</b> below.
+              ⚠️ SecurePrint Agent is connected, but no physical printers were detected. Check your USB/Wi-Fi printer cable or driver.
             </div>
           ) : (
             <select
               value={selectedPrinterId}
               onChange={e => handleSelectPrinter(e.target.value)}
+              disabled={isDeleted}
               style={{
                 width: '100%',
                 padding: '10px 12px',
@@ -234,6 +302,23 @@ export default function SmartPrintModal({ job, onClose, onJobUpdated, socket }) 
               <AlertCircle size={14} /> Color printing unavailable on this printer. Prints in sharp Black & White.
             </div>
           )}
+
+          {/* Printer offline warning */}
+          {selectedPrinter && selectedPrinter.status === 'OFFLINE' && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: '0.72rem',
+              color: '#DC2626',
+              marginTop: 6,
+              background: '#FEF2F2',
+              padding: '6px 10px',
+              borderRadius: 'var(--radius-sm)'
+            }}>
+              <AlertCircle size={14} /> Selected printer is currently OFFLINE. Check printer power and USB connection.
+            </div>
+          )}
         </div>
 
         {/* Step 2: Print Settings Form */}
@@ -244,7 +329,9 @@ export default function SmartPrintModal({ job, onClose, onJobUpdated, socket }) 
           background: 'var(--color-surface-2)',
           padding: 14,
           borderRadius: 'var(--radius-md)',
-          marginBottom: 20
+          marginBottom: 20,
+          opacity: isDeleted ? 0.5 : 1,
+          pointerEvents: isDeleted ? 'none' : 'auto'
         }}>
           <div>
             <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: 4 }}>Color Mode</label>
@@ -338,21 +425,65 @@ export default function SmartPrintModal({ job, onClose, onJobUpdated, socket }) 
             className="btn btn-primary"
             style={{ fontWeight: 800, padding: '12px', justifyContent: 'center', gap: 8 }}
             onClick={handleSendToPhysicalPrinter}
-            disabled={!selectedPrinterId || ['SENDING', 'DOWNLOADING', 'SUBMITTED'].includes(printingStatus)}
+            disabled={
+              isDeleted ||
+              !isAgentOnline ||
+              !selectedPrinterId ||
+              selectedPrinter?.status === 'OFFLINE' ||
+              ['SENDING', 'DOWNLOADING', 'SUBMITTED'].includes(printingStatus)
+            }
           >
             <PrinterIcon size={18} />
-            {['SENDING', 'DOWNLOADING', 'SUBMITTED'].includes(printingStatus) ? 'Printing in Progress...' : 'SEND TO PHYSICAL PRINTER'}
+            {['SENDING', 'DOWNLOADING', 'SUBMITTED'].includes(printingStatus)
+              ? 'Printing in Progress...'
+              : isDeleted
+                ? 'Document Deleted (Cannot Print)'
+                : !isAgentOnline
+                  ? 'Agent Offline (Cannot Physical Print)'
+                  : 'SEND TO PHYSICAL PRINTER'}
           </button>
+
+          {/* Popup Blocked Notification */}
+          {popupBlockedUrl && (
+            <div style={{
+              background: '#EFF6FF',
+              border: '1px solid #BFDBFE',
+              borderRadius: 'var(--radius-md)',
+              padding: 10,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8
+            }}>
+              <span style={{ fontSize: 'var(--font-size-xs)', color: '#1E40AF' }}>Browser blocked the print popup:</span>
+              <a
+                href={popupBlockedUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-sm btn-primary"
+                style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                onClick={() => setPopupBlockedUrl(null)}
+              >
+                Open Print Preview ↗
+              </a>
+            </div>
+          )}
 
           {/* Controlled Manual Fallback */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
             <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-              Agent offline or experiencing issues?
+              Agent offline or manual print needed?
             </span>
             <button
               className="btn btn-ghost btn-sm"
-              style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-primary)', textDecoration: 'underline' }}
+              style={{
+                fontSize: 'var(--font-size-xs)',
+                color: isDeleted ? 'var(--color-text-muted)' : 'var(--color-primary)',
+                textDecoration: isDeleted ? 'none' : 'underline',
+                cursor: isDeleted ? 'not-allowed' : 'pointer'
+              }}
               onClick={handleManualFallback}
+              disabled={isDeleted}
             >
               Manual Browser Print ↗
             </button>

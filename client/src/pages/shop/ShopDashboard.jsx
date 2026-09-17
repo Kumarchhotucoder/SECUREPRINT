@@ -7,7 +7,8 @@ import {
   Shield, LayoutDashboard, PrinterIcon, QrCode, History,
   LogOut, Menu, X, RefreshCw, ChevronRight,
   CheckCircle, Clock, AlertCircle, FileText, Image, File,
-  Play, Check, XCircle, Eye, ExternalLink, Sparkles, MapPin, Tag, Users, Laptop
+  Play, Check, XCircle, Eye, ExternalLink, Sparkles, MapPin, Tag, Users, Laptop,
+  CreditCard, BarChart3, Settings, Bell, User as UserIcon
 } from 'lucide-react'
 import api from '../../lib/api'
 import EditShopDetailsModal from './EditShopDetailsModal'
@@ -21,19 +22,29 @@ import { showTopAlert } from '../../utils/notifications'
 const Sidebar = ({ shop, open, onClose, onOpenEditModal }) => {
   const { logout, user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const handleLogout = async () => {
     await logout()
-    navigate('/shop/login')
+    navigate('/admin/login')
     toast.success('Logged out')
   }
 
+  const basePath = location.pathname.startsWith('/shop/dashboard') ? '/shop/dashboard' : '/admin'
+
   const navItems = [
-    { path: '/shop/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} />, end: true },
-    { path: '/shop/dashboard/queue', label: 'Print Queue', icon: <PrinterIcon size={18} /> },
-    { path: '/shop/dashboard/printers', label: 'Printers & Agent', icon: <PrinterIcon size={18} /> },
-    { path: '/shop/dashboard/qr', label: 'Shop QR', icon: <QrCode size={18} /> },
-    { path: '/shop/dashboard/history', label: 'History', icon: <History size={18} /> },
+    { path: `${basePath}`, label: 'Dashboard', icon: <LayoutDashboard size={18} />, end: true },
+    { path: `${basePath}/queue`, label: 'Print Jobs', icon: <PrinterIcon size={18} /> },
+    { path: `${basePath}/customers`, label: 'Customers', icon: <Users size={18} /> },
+    { path: `${basePath}/payments`, label: 'Payments', icon: <CreditCard size={18} /> },
+    { path: `${basePath}/printers`, label: 'Printers', icon: <PrinterIcon size={18} /> },
+    { path: `${basePath}/agent`, label: 'Print Agent', icon: <Laptop size={18} /> },
+    { path: `${basePath}/qr`, label: 'QR Code', icon: <QrCode size={18} /> },
+    { path: `${basePath}/analytics`, label: 'Analytics', icon: <BarChart3 size={18} /> },
+    { path: `${basePath}/subscription`, label: 'Subscription', icon: <Sparkles size={18} /> },
+    { path: `${basePath}/settings`, label: 'Shop Settings', icon: <Settings size={18} /> },
+    { path: `${basePath}/notifications`, label: 'Notifications', icon: <Bell size={18} /> },
+    { path: `${basePath}/profile`, label: 'Profile', icon: <UserIcon size={18} /> },
   ]
 
   return (
@@ -150,15 +161,24 @@ const DashboardHome = ({ shop, stats, refreshStats, socket, refreshTrigger, onOp
       fetchRecentJobs()
       refreshStats()
     }
+    const handleCashReq = (data) => {
+      fetchRecentJobs()
+      refreshStats()
+      toast(`💵 Cash payment requested for Job #${data?.jobNumber || ''} (₹${data?.amount || ''})`, { icon: '💵', duration: 6000 })
+    }
     socket.on('new-job', handleUpdate)
     socket.on('payment-received', handleUpdate)
     socket.on('job-updated', handleUpdate)
     socket.on('job-files-deleted', handleUpdate)
+    socket.on('payment-requested-cash', handleCashReq)
+    socket.on('cash-payment-requested', handleCashReq)
     return () => {
       socket.off('new-job', handleUpdate)
       socket.off('payment-received', handleUpdate)
       socket.off('job-updated', handleUpdate)
       socket.off('job-files-deleted', handleUpdate)
+      socket.off('payment-requested-cash', handleCashReq)
+      socket.off('cash-payment-requested', handleCashReq)
     }
   }, [socket, fetchRecentJobs, refreshStats])
 
@@ -297,22 +317,30 @@ const DashboardHome = ({ shop, stats, refreshStats, socket, refreshTrigger, onOp
         </div>
       </div>
 
-      {/* Stats Grid — Requirement 12 */}
-      <div className="stats-grid" style={{ marginBottom: 'var(--space-8)' }}>
+      {/* Stats Grid — Exact 8 Required Production Metrics */}
+      <div className="stats-grid" style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gap: 'var(--space-4)',
+        marginBottom: 'var(--space-8)'
+      }}>
         {[
-          { label: "Today's Customers", value: stats.todayCustomers ?? 0, icon: <Users size={20} />, bg: '#EFF6FF', color: 'var(--color-primary)' },
-          { label: 'Total Customers', value: stats.totalCustomers ?? 0, icon: <Users size={20} />, bg: '#F5F3FF', color: '#7C3AED' },
-          { label: "Today's Print Jobs", value: stats.todayJobs ?? ((stats.active || 0) + (stats.pending || 0) + (stats.completed || 0)), icon: <FileText size={20} />, bg: '#ECFDF5', color: '#059669' },
-          { label: 'Pending in Queue', value: stats.pending ?? 0, icon: <Clock size={20} />, bg: '#FFF7ED', color: '#D97706' },
-          { label: 'Completed Jobs', value: stats.completed ?? 0, icon: <CheckCircle size={20} />, bg: '#F0FDF4', color: 'var(--color-verified)' }
+          { label: "Today's Jobs", value: stats.todayJobs ?? ((stats.active || 0) + (stats.pending || 0) + (stats.completed || 0)), icon: <FileText size={20} />, bg: '#EFF6FF', color: 'var(--color-primary)' },
+          { label: "Today's Revenue", value: `₹${(stats.todayRevenue ?? 0).toLocaleString('en-IN')}`, icon: <CreditCard size={20} />, bg: '#ECFDF5', color: '#059669' },
+          { label: 'Pending Jobs', value: stats.pendingJobs ?? stats.pending ?? 0, icon: <Clock size={20} />, bg: '#FFF7ED', color: '#D97706' },
+          { label: 'Printing Jobs', value: stats.printingJobs ?? stats.active ?? 0, icon: <PrinterIcon size={20} />, bg: '#F5F3FF', color: '#7C3AED' },
+          { label: 'Completed Jobs', value: stats.completedJobs ?? stats.completed ?? 0, icon: <CheckCircle size={20} />, bg: '#F0FDF4', color: 'var(--color-verified)' },
+          { label: 'Pending Payments', value: stats.pendingPayments ?? 0, icon: <CreditCard size={20} />, bg: '#FEF2F2', color: '#DC2626' },
+          { label: 'Active Printers', value: stats.activePrinters || `${stats.activePrintersCount || 0}/${stats.totalPrinters || 0}`, icon: <PrinterIcon size={20} />, bg: '#F0F9FF', color: '#0284C7' },
+          { label: 'Agent Status', value: stats.agentStatus === 'ONLINE' ? '🟢 Online' : '🔴 Offline', icon: <Laptop size={20} />, bg: stats.agentStatus === 'ONLINE' ? '#F0FDF4' : '#FEF2F2', color: stats.agentStatus === 'ONLINE' ? '#16A34A' : '#DC2626' }
         ].map((s, i) => (
-          <div key={i} className="stat-card animate-slideUp" style={{ animationDelay: `${i * 0.05}s` }}>
-            <div className="stat-icon" style={{ background: s.bg, color: s.color }}>
-              {typeof s.icon === 'string' ? <span style={{ fontWeight: 800, fontSize: 18 }}>{s.icon}</span> : s.icon}
+          <div key={i} className="stat-card animate-slideUp" style={{ animationDelay: `${i * 0.04}s`, padding: 'var(--space-4)' }}>
+            <div className="stat-icon" style={{ background: s.bg, color: s.color, width: 42, height: 42, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {s.icon}
             </div>
             <div>
-              <div className="stat-value">{s.value}</div>
-              <div className="stat-label">{s.label}</div>
+              <div className="stat-value" style={{ fontSize: '1.4rem', fontWeight: 800 }}>{s.value}</div>
+              <div className="stat-label" style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: 'var(--color-text-muted)' }}>{s.label}</div>
             </div>
           </div>
         ))}
@@ -384,13 +412,34 @@ const DashboardHome = ({ shop, stats, refreshStats, socket, refreshTrigger, onOp
                         </button>
                       )}
                       {job.status === 'RECEIVED' && (
-                        <button className="btn btn-success btn-sm" onClick={() => handleJobAction(job._id, 'print')}>
+                        <button className="btn btn-primary btn-sm" onClick={() => handleJobAction(job._id, 'print')}>
                           Print
                         </button>
                       )}
                       {job.status === 'PRINTING' && (
-                        <button className="btn btn-success btn-sm" onClick={() => handleJobAction(job._id, 'complete')}>
-                          Complete
+                        <button className="btn btn-success btn-sm" style={{ fontWeight: 800 }} onClick={() => handleJobAction(job._id, 'complete')}>
+                          Mark Printing Completed
+                        </button>
+                      )}
+                      {(job.paymentStatus === 'CASH_PAYMENT_PENDING' || job.paymentStatus === 'PAYMENT_PENDING_CASH') && (
+                        <button
+                          className="btn btn-warning btn-sm"
+                          style={{ fontWeight: 800 }}
+                          onClick={async () => {
+                            try {
+                              toast.loading('Confirming cash...', { id: 'cash-c' })
+                              await api.post('/payments/confirm-cash', { jobId: job._id })
+                              toast.dismiss('cash-c')
+                              toast.success('Cash confirmed! 10s cleanup started.')
+                              fetchRecentJobs()
+                              refreshStats()
+                            } catch (e) {
+                              toast.dismiss('cash-c')
+                              toast.error(e.response?.data?.message || 'Failed to confirm cash')
+                            }
+                          }}
+                        >
+                          Confirm Cash (₹{job.finalPrice || job.estimatedPrice})
                         </button>
                       )}
                     </div>
@@ -746,11 +795,77 @@ const JobCard = ({ job, onAction }) => {
           </button>
         )}
         {job.status === 'PRINTING' && (
-          <button id={`complete-${job._id}`} className="btn btn-success" style={{ flex: 1, gap: 8, fontWeight: 700 }} onClick={() => onAction(job._id, 'complete')}>
-            <Check size={18} /> ✓ Mark as Completed
+          <button id={`complete-${job._id}`} className="btn btn-success" style={{ flex: 1, gap: 8, fontWeight: 800 }} onClick={() => onAction(job._id, 'complete')}>
+            <Check size={18} /> MARK PRINTING COMPLETED
           </button>
         )}
-        {job.status === 'AWAITING_PAYMENT' && !isPaid && (
+
+        {/* Section 17 & 45: Dedicated Cash Payment Request Banner */}
+        {(job.paymentStatus === 'CASH_PAYMENT_PENDING' || job.paymentStatus === 'PAYMENT_PENDING_CASH') && !isPaid && (
+          <div style={{
+            background: '#FEF3C7',
+            border: '2px solid #F59E0B',
+            borderRadius: 'var(--radius-md)',
+            padding: 'var(--space-3)',
+            marginBottom: 'var(--space-3)',
+            color: '#92400E',
+            width: '100%'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontWeight: 800, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Banknote size={15} /> CASH PAYMENT REQUESTED
+              </span>
+              <span style={{ fontWeight: 800, fontSize: 13, color: '#B45309' }}>
+                ₹{job.finalPrice || job.estimatedPrice}
+              </span>
+            </div>
+            <div style={{ fontSize: 11, color: '#78350F', marginBottom: 8 }}>
+              Customer <strong>{job.customerName}</strong> requested cash payment. Verify cash received at counter.
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                id={`confirm-cash-${job._id}`}
+                className="btn btn-success btn-xs"
+                style={{ flex: 2, fontWeight: 800, fontSize: 11, padding: '6px 10px' }}
+                onClick={async () => {
+                  try {
+                    toast.loading('Confirming cash received...', { id: 'cash-conf' })
+                    await api.post('/payments/confirm-cash', { jobId: job._id })
+                    toast.dismiss('cash-conf')
+                    toast.success('Cash payment confirmed! 10-second cleanup started.')
+                    if (onAction) onAction(job._id, 'refresh')
+                  } catch (e) {
+                    toast.dismiss('cash-conf')
+                    toast.error(e.response?.data?.message || 'Failed to confirm cash.')
+                  }
+                }}
+              >
+                <Check size={13} /> CONFIRM CASH RECEIVED
+              </button>
+              <button
+                id={`reject-cash-${job._id}`}
+                className="btn btn-ghost btn-xs"
+                style={{ flex: 1, fontWeight: 700, fontSize: 10, color: '#DC2626', border: '1px solid #FCA5A5' }}
+                onClick={async () => {
+                  try {
+                    toast.loading('Rejecting cash payment...', { id: 'cash-rej' })
+                    await api.post('/payments/reject-cash', { jobId: job._id })
+                    toast.dismiss('cash-rej')
+                    toast('Cash payment request rejected.')
+                    if (onAction) onAction(job._id, 'refresh')
+                  } catch (e) {
+                    toast.dismiss('cash-rej')
+                    toast.error('Failed to reject cash.')
+                  }
+                }}
+              >
+                REJECT
+              </button>
+            </div>
+          </div>
+        )}
+
+        {job.status === 'AWAITING_PAYMENT' && !isPaid && job.paymentStatus !== 'CASH_PAYMENT_PENDING' && job.paymentStatus !== 'PAYMENT_PENDING_CASH' && (
           <button
             id={`mark-paid-${job._id}`}
             className="btn btn-secondary btn-sm"
@@ -758,18 +873,13 @@ const JobCard = ({ job, onAction }) => {
             onClick={async () => {
               try {
                 toast.loading('Confirming counter payment...', { id: 'cash-pay' })
-                await api.post('/payments/verify', {
-                  jobId: job._id,
-                  razorpay_order_id: `cash_${job._id}`,
-                  razorpay_payment_id: `cash_pay_${Date.now()}`,
-                  razorpay_signature: 'verified_counter_cash'
-                })
+                await api.post('/payments/confirm-cash', { jobId: job._id })
                 toast.dismiss('cash-pay')
-                toast.success('Counter payment confirmed! 10-second file cleanup started.')
+                toast.success('Counter cash confirmed! 10-second file cleanup started.')
                 if (onAction) onAction(job._id, 'refresh')
               } catch (e) {
                 toast.dismiss('cash-pay')
-                toast.error('Failed to confirm payment')
+                toast.error(e.response?.data?.message || 'Failed to confirm payment')
               }
             }}
           >
@@ -1112,6 +1222,623 @@ const JobHistory = ({ shop, socket, refreshTrigger }) => {
   )
 }
 
+// ── Customers Tab ──────────────────────────────────────────────
+const CustomersTab = ({ shop }) => {
+  const [customers, setCustomers] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!shop?._id) return
+    api.get(`/shops/${shop._id}/jobs?limit=50`).then(res => {
+      const jobs = res.data.data || []
+      const customerMap = {}
+      jobs.forEach(j => {
+        const name = j.customerName || 'Customer'
+        if (!customerMap[name]) {
+          customerMap[name] = {
+            name,
+            totalJobs: 0,
+            totalPages: 0,
+            totalSpend: 0,
+            lastVisit: j.createdAt
+          }
+        }
+        customerMap[name].totalJobs += 1
+        customerMap[name].totalPages += j.totalPages || 1
+        customerMap[name].totalSpend += j.finalPrice || j.estimatedPrice || 0
+      })
+      setCustomers(Object.values(customerMap))
+    }).catch(console.error).finally(() => setLoading(false))
+  }, [shop])
+
+  return (
+    <div className="animate-fadeIn">
+      <div style={{ marginBottom: 'var(--space-6)' }}>
+        <h2 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 800, margin: 0 }}>Customers</h2>
+        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: 4 }}>
+          Customer print sessions and engagement history for {shop?.name}.
+        </p>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 'var(--space-12)' }}><div className="spinner spinner-primary" /></div>
+      ) : customers.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: 'var(--space-12)' }}>
+          <Users size={40} style={{ margin: '0 auto var(--space-3)', opacity: 0.3 }} />
+          <p style={{ fontWeight: 600 }}>No customer sessions recorded yet</p>
+          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+            Customers will appear here automatically when they scan your counter QR.
+          </p>
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 'var(--font-size-sm)' }}>
+              <thead>
+                <tr style={{ background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)' }}>
+                  <th style={{ padding: '12px 16px', fontWeight: 700 }}>Customer Name</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 700 }}>Jobs Printed</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 700 }}>Total Pages</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 700 }}>Total Revenue</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 700 }}>Last Printed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customers.map((c, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <td style={{ padding: '14px 16px', fontWeight: 700 }}>{c.name}</td>
+                    <td style={{ padding: '14px 16px' }}>{c.totalJobs} job(s)</td>
+                    <td style={{ padding: '14px 16px' }}>{c.totalPages} page(s)</td>
+                    <td style={{ padding: '14px 16px', color: '#16A34A', fontWeight: 700 }}>₹{c.totalSpend}</td>
+                    <td style={{ padding: '14px 16px', color: 'var(--color-text-muted)' }}>
+                      {new Date(c.lastVisit).toLocaleDateString('en-IN')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Payments Tab ───────────────────────────────────────────────
+const PaymentsTab = ({ shop }) => {
+  const [jobs, setJobs] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!shop?._id) return
+    api.get(`/shops/${shop._id}/jobs?limit=50`).then(res => {
+      setJobs(res.data.data || [])
+    }).catch(console.error).finally(() => setLoading(false))
+  }, [shop])
+
+  const paidJobs = jobs.filter(j => j.paymentStatus === 'PAID')
+  const totalRevenue = paidJobs.reduce((sum, j) => sum + (j.finalPrice || j.estimatedPrice || 0), 0)
+
+  return (
+    <div className="animate-fadeIn">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-6)', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h2 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 800, margin: 0 }}>Payments & Transactions</h2>
+          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: 4 }}>
+            Direct customer print payments verified by server.
+          </p>
+        </div>
+        <div className="card" style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div>
+            <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: 700 }}>Settled Total</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#16A34A' }}>₹{totalRevenue}</div>
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 'var(--space-12)' }}><div className="spinner spinner-primary" /></div>
+      ) : paidJobs.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: 'var(--space-12)' }}>
+          <CreditCard size={40} style={{ margin: '0 auto var(--space-3)', opacity: 0.3 }} />
+          <p style={{ fontWeight: 600 }}>No completed payments yet</p>
+          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+            When customers pay via UPI or Counter Cash, transaction records will appear here.
+          </p>
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 'var(--font-size-sm)' }}>
+              <thead>
+                <tr style={{ background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)' }}>
+                  <th style={{ padding: '12px 16px', fontWeight: 700 }}>Job #</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 700 }}>Customer</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 700 }}>Amount</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 700 }}>Method</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 700 }}>Status</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 700 }}>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paidJobs.map((j) => (
+                  <tr key={j._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <td style={{ padding: '14px 16px', fontWeight: 700 }}>#{j.jobNumber}</td>
+                    <td style={{ padding: '14px 16px' }}>{j.customerName}</td>
+                    <td style={{ padding: '14px 16px', fontWeight: 800, color: 'var(--color-primary)' }}>₹{j.finalPrice || j.estimatedPrice}</td>
+                    <td style={{ padding: '14px 16px' }}>
+                      <span className="badge badge-verified" style={{ fontSize: '0.7rem' }}>UPI / Direct</span>
+                    </td>
+                    <td style={{ padding: '14px 16px' }}>
+                      <span style={{ color: '#16A34A', fontWeight: 700, fontSize: '0.75rem' }}>✓ PAID</span>
+                    </td>
+                    <td style={{ padding: '14px 16px', color: 'var(--color-text-muted)' }}>
+                      {new Date(j.paidAt || j.updatedAt).toLocaleString('en-IN')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Agent Tab ──────────────────────────────────────────────────
+const AgentTab = ({ shop }) => {
+  const [pairingCode, setPairingCode] = useState(null)
+  const [generating, setGenerating] = useState(false)
+  const [agents, setAgents] = useState([])
+
+  const fetchAgents = useCallback(() => {
+    if (!shop?._id) return
+    api.get('/printers').then(res => {
+      setAgents(res.data.data?.agents || [])
+    }).catch(console.error)
+  }, [shop])
+
+  useEffect(() => {
+    fetchAgents()
+  }, [fetchAgents])
+
+  const handleGenerateCode = async () => {
+    setGenerating(true)
+    try {
+      const res = await api.post('/printers/pairing-code')
+      setPairingCode(res.data.data?.pairingCode)
+      toast.success('Pairing code generated! Valid for 10 minutes.')
+      fetchAgents()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to generate code')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const activeAgent = agents.find(a => a.status === 'ONLINE') || agents[0]
+
+  return (
+    <div className="animate-fadeIn">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-6)', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h2 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 800, margin: 0 }}>Print Agent Configuration</h2>
+          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: 4 }}>
+            Desktop bridge connecting Windows hardware printers to SecurePrint Cloud.
+          </p>
+        </div>
+        <button className="btn btn-primary" onClick={handleGenerateCode} disabled={generating}>
+          <Laptop size={16} /> {generating ? 'Generating...' : '+ Connect Computer'}
+        </button>
+      </div>
+
+      {pairingCode && (
+        <div className="card" style={{ background: '#EFF6FF', border: '2px dashed #3B82F6', padding: 24, marginBottom: 24, textAlign: 'center' }}>
+          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1D4ED8', textTransform: 'uppercase' }}>
+            Enter this 6-digit code in SecurePrint Print Agent:
+          </div>
+          <div style={{ fontSize: '3rem', fontWeight: 900, letterSpacing: '0.15em', color: '#1E40AF', margin: '12px 0' }}>
+            {pairingCode}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: '#60A5FA' }}>
+            Expires in 10 minutes · Single-use secure token exchange
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }}>
+        <div className="card" style={{ padding: 24 }}>
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Laptop size={20} color="var(--color-primary)" />
+            Agent Connection Status
+          </h3>
+          {activeAgent ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--color-surface-2)', borderRadius: 8 }}>
+                <span style={{ color: 'var(--color-text-muted)' }}>Status</span>
+                <span style={{ fontWeight: 800, color: activeAgent.status === 'ONLINE' ? '#16A34A' : '#DC2626' }}>
+                  {activeAgent.status === 'ONLINE' ? '🟢 ONLINE' : '🔴 OFFLINE'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--color-surface-2)', borderRadius: 8 }}>
+                <span style={{ color: 'var(--color-text-muted)' }}>Computer Name</span>
+                <span style={{ fontWeight: 700 }}>{activeAgent.computerName || 'Counter Computer'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--color-surface-2)', borderRadius: 8 }}>
+                <span style={{ color: 'var(--color-text-muted)' }}>OS</span>
+                <span style={{ fontWeight: 700 }}>{activeAgent.os || 'Windows'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--color-surface-2)', borderRadius: 8 }}>
+                <span style={{ color: 'var(--color-text-muted)' }}>Last Seen</span>
+                <span>{new Date(activeAgent.lastSeenAt).toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+          ) : (
+            <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+              No Print Agent paired yet. Click <strong>+ Connect Computer</strong> above to link your Windows counter computer.
+            </p>
+          )}
+        </div>
+
+        <div className="card" style={{ padding: 24 }}>
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Terminal size={20} color="#D97706" />
+            Quick CLI Runner
+          </h3>
+          <p style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+            Run directly in terminal on your shop's Windows PC:
+          </p>
+          <div style={{ background: '#0F172A', color: '#38BDF8', padding: 14, borderRadius: 10, fontFamily: 'monospace', fontSize: '0.8rem', lineHeight: 1.8, marginTop: 10 }}>
+            <div>cd agent</div>
+            <div>node cli.js pair &lt;6-DIGIT-CODE&gt;</div>
+            <div>node cli.js start</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Analytics Tab ──────────────────────────────────────────────
+const AnalyticsTab = ({ shop, stats }) => {
+  return (
+    <div className="animate-fadeIn">
+      <div style={{ marginBottom: 'var(--space-6)' }}>
+        <h2 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 800, margin: 0 }}>Shop Analytics</h2>
+        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: 4 }}>
+          Live metrics for {shop?.name} (Resets daily at 00:00 Asia/Kolkata).
+        </p>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 20, marginBottom: 28 }}>
+        <div className="card" style={{ padding: 20 }}>
+          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Today's Revenue</div>
+          <div style={{ fontSize: '2rem', fontWeight: 900, color: '#16A34A', marginTop: 4 }}>₹{stats.todayRevenue || 0}</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4 }}>Resets at midnight IST</div>
+        </div>
+        <div className="card" style={{ padding: 20 }}>
+          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Lifetime Revenue</div>
+          <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--color-primary)', marginTop: 4 }}>₹{stats.lifetimeRevenue || 0}</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4 }}>Total customer payments</div>
+        </div>
+        <div className="card" style={{ padding: 20 }}>
+          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Today's Pages Printed</div>
+          <div style={{ fontSize: '2rem', fontWeight: 900, color: '#9333EA', marginTop: 4 }}>{stats.todayPages || 0}</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4 }}>Total sheets printed</div>
+        </div>
+        <div className="card" style={{ padding: 20 }}>
+          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Active Printers</div>
+          <div style={{ fontSize: '2rem', fontWeight: 900, color: '#0284C7', marginTop: 4 }}>{stats.activePrinters || '0/0'}</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4 }}>Ready machines</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Subscription Tab ───────────────────────────────────────────
+const SubscriptionTab = ({ shop, onUpdated }) => {
+  const [plans, setPlans] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [activating, setActivating] = useState(false)
+
+  useEffect(() => {
+    api.get('/subscriptions/plans').then(res => {
+      setPlans(res.data.data || [])
+    }).catch(console.error).finally(() => setLoading(false))
+  }, [])
+
+  const handleActivateTrial = async () => {
+    setActivating(true)
+    try {
+      const res = await api.post('/subscriptions/activate-trial')
+      toast.success(res.data.data?.message || 'Trial activated!')
+      if (onUpdated) onUpdated(prev => ({ ...prev, subscription: res.data.data.subscription }))
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to activate trial')
+    } finally {
+      setActivating(false)
+    }
+  }
+
+  const sub = shop?.subscription || {}
+
+  return (
+    <div className="animate-fadeIn">
+      <div style={{ marginBottom: 'var(--space-6)' }}>
+        <h2 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 800, margin: 0 }}>SaaS Subscription</h2>
+        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: 4 }}>
+          Manage your SecurePrint platform subscription plan and counter entitlements.
+        </p>
+      </div>
+
+      <div className="card" style={{ padding: 24, marginBottom: 32, background: 'linear-gradient(135deg, #1E3A8A, #1D4ED8)', color: 'white' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+          <div>
+            <span style={{ background: 'rgba(255,255,255,0.2)', padding: '4px 12px', borderRadius: 999, fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase' }}>
+              Active Plan
+            </span>
+            <h3 style={{ fontSize: '1.8rem', fontWeight: 900, margin: '8px 0 4px', color: 'white' }}>
+              {sub.plan || 'TRIAL'} PLAN
+            </h3>
+            <p style={{ color: '#BFDBFE', fontSize: '0.85rem', margin: 0 }}>
+              Status: <strong>{sub.status || 'ACTIVE'}</strong> · Valid until: {new Date(sub.validUntil || Date.now()).toLocaleDateString('en-IN')}
+            </p>
+          </div>
+          {sub.plan === 'TRIAL' && (
+            <button className="btn btn-secondary" onClick={handleActivateTrial} disabled={activating} style={{ background: 'white', color: '#1D4ED8', fontWeight: 800 }}>
+              {activating ? 'Extending...' : 'Extend 7-Day Trial'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: 20 }}>Available Plans</h3>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 'var(--space-8)' }}><div className="spinner spinner-primary" /></div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
+          {plans.map((p) => (
+            <div key={p.id} className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', borderRadius: 16 }}>
+              <h4 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: 6 }}>{p.name}</h4>
+              <div style={{ fontSize: '1.8rem', fontWeight: 900, color: 'var(--color-primary)', marginBottom: 16 }}>
+                ₹{p.price} <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>/ {p.durationDays} days</span>
+              </div>
+              <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {p.features?.map((feat, i) => (
+                  <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem' }}>
+                    <CheckCircle size={16} color="#16A34A" /> {feat}
+                  </li>
+                ))}
+              </ul>
+              <button
+                className={`btn ${sub.plan === p.id ? 'btn-secondary' : 'btn-primary'} w-full`}
+                disabled={sub.plan === p.id}
+                style={{ justifyContent: 'center', fontWeight: 700 }}
+              >
+                {sub.plan === p.id ? 'Current Plan' : 'Select Plan'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Settings Tab ───────────────────────────────────────────────
+const SettingsTab = ({ shop, onUpdated }) => {
+  const [formData, setFormData] = useState({
+    name: shop?.name || '',
+    phone: shop?.phone || '',
+    email: shop?.email || '',
+    bwPerPage: shop?.pricing?.bwPerPage ?? 1,
+    colorPerPage: shop?.pricing?.colorPerPage ?? 5
+  })
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const res = await api.put('/shops/my', {
+        name: formData.name,
+        phone: formData.phone,
+        email: formData.email,
+        pricing: {
+          bwPerPage: Number(formData.bwPerPage),
+          colorPerPage: Number(formData.colorPerPage)
+        }
+      })
+      toast.success('Shop settings updated successfully!')
+      if (onUpdated) onUpdated(res.data.data)
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update settings')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="animate-fadeIn" style={{ maxWidth: 640 }}>
+      <div style={{ marginBottom: 'var(--space-6)' }}>
+        <h2 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 800, margin: 0 }}>Shop Settings</h2>
+        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: 4 }}>
+          Configure your counter details and custom per-page customer print rates.
+        </p>
+      </div>
+
+      <form onSubmit={handleSave} className="card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div className="form-group">
+          <label className="form-label" style={{ fontWeight: 700 }}>Shop Display Name</label>
+          <input
+            type="text"
+            className="form-input"
+            value={formData.name}
+            onChange={e => setFormData({ ...formData, name: e.target.value })}
+            required
+          />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div className="form-group">
+            <label className="form-label" style={{ fontWeight: 700 }}>Contact Phone</label>
+            <input
+              type="text"
+              className="form-input"
+              value={formData.phone}
+              onChange={e => setFormData({ ...formData, phone: e.target.value })}
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" style={{ fontWeight: 700 }}>Contact Email</label>
+            <input
+              type="email"
+              className="form-input"
+              value={formData.email}
+              onChange={e => setFormData({ ...formData, email: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div className="form-group">
+            <label className="form-label" style={{ fontWeight: 700 }}>B&W Rate (₹/page)</label>
+            <input
+              type="number"
+              min="0.5"
+              step="0.5"
+              className="form-input"
+              value={formData.bwPerPage}
+              onChange={e => setFormData({ ...formData, bwPerPage: e.target.value })}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" style={{ fontWeight: 700 }}>Color Rate (₹/page)</label>
+            <input
+              type="number"
+              min="1"
+              step="0.5"
+              className="form-input"
+              value={formData.colorPerPage}
+              onChange={e => setFormData({ ...formData, colorPerPage: e.target.value })}
+              required
+            />
+          </div>
+        </div>
+
+        <button type="submit" className="btn btn-primary" disabled={saving} style={{ marginTop: 8, justifyContent: 'center' }}>
+          {saving ? 'Saving...' : 'Save Counter Settings'}
+        </button>
+      </form>
+    </div>
+  )
+}
+
+// ── Notifications Tab ──────────────────────────────────────────
+const NotificationsTab = ({ shop, socket }) => {
+  const [notifications, setNotifications] = useState([
+    { id: 1, title: 'SecurePrint System Initialized', time: 'Just now', type: 'system', icon: '🔒' }
+  ])
+
+  useEffect(() => {
+    if (!socket) return
+    const onNewJob = (d) => {
+      setNotifications(prev => [
+        { id: Date.now(), title: `New Print Request: #${d.jobNumber} from ${d.customerName}`, time: 'Just now', type: 'job', icon: '🖨️' },
+        ...prev
+      ])
+    }
+    const onPayment = (d) => {
+      setNotifications(prev => [
+        { id: Date.now(), title: `Payment Verified: ₹${d.amount} for Job #${d.jobNumber}`, time: 'Just now', type: 'payment', icon: '💰' },
+        ...prev
+      ])
+    }
+    const onDeletion = (d) => {
+      setNotifications(prev => [
+        { id: Date.now(), title: `Files Purged: Job #${d.jobNumber} documents permanently removed from disk`, time: 'Just now', type: 'deletion', icon: '🛡️' },
+        ...prev
+      ])
+    }
+
+    socket.on('new-job', onNewJob)
+    socket.on('payment-received', onPayment)
+    socket.on('job-files-deleted', onDeletion)
+
+    return () => {
+      socket.off('new-job', onNewJob)
+      socket.off('payment-received', onPayment)
+      socket.off('job-files-deleted', onDeletion)
+    }
+  }, [socket])
+
+  return (
+    <div className="animate-fadeIn" style={{ maxWidth: 700 }}>
+      <div style={{ marginBottom: 'var(--space-6)' }}>
+        <h2 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 800, margin: 0 }}>Real-Time Notifications</h2>
+        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: 4 }}>
+          Live feed of counter requests, print events, payments, and automated file deletions.
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {notifications.map((n) => (
+          <div key={n.id} className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
+            <span style={{ fontSize: '1.4rem' }}>{n.icon}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>{n.title}</div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: 2 }}>{n.time}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Profile Tab ────────────────────────────────────────────────
+const ProfileTab = ({ user }) => {
+  return (
+    <div className="animate-fadeIn" style={{ maxWidth: 640 }}>
+      <div style={{ marginBottom: 'var(--space-6)' }}>
+        <h2 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 800, margin: 0 }}>Shopkeeper Profile</h2>
+        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: 4 }}>
+          Authenticated account credentials and tenant security context.
+        </p>
+      </div>
+
+      <div className="card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, paddingBottom: 16, borderBottom: '1px solid var(--color-border)' }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--color-primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1.4rem' }}>
+            {user?.name?.[0] || 'S'}
+          </div>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: '1.2rem' }}>{user?.name || 'Shop Owner'}</div>
+            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.88rem' }}>{user?.email}</div>
+            <span className="badge badge-verified" style={{ marginTop: 6, fontSize: '0.7rem' }}>
+              ROLE: {user?.role || 'SHOP_OWNER'}
+            </span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: '0.9rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--color-surface-2)', borderRadius: 8 }}>
+            <span style={{ color: 'var(--color-text-muted)' }}>Tenant Isolation</span>
+            <span style={{ fontWeight: 700, color: '#16A34A' }}>Active (Strict Server-Side)</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--color-surface-2)', borderRadius: 8 }}>
+            <span style={{ color: 'var(--color-text-muted)' }}>Authentication Protocol</span>
+            <span style={{ fontWeight: 700 }}>JWT + Refresh Tokens</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Dashboard Component ───────────────────────────────────
 const ShopDashboard = () => {
   const { user } = useAuth()
@@ -1220,9 +1947,18 @@ const ShopDashboard = () => {
   }
 
   const pageTitle = () => {
-    if (location.pathname.includes('/queue')) return 'Print Queue'
+    if (location.pathname.includes('/queue')) return 'Print Jobs'
+    if (location.pathname.includes('/printers')) return 'Printer Management'
+    if (location.pathname.includes('/customers')) return 'Customers'
+    if (location.pathname.includes('/payments')) return 'Payments'
+    if (location.pathname.includes('/agent')) return 'Windows Print Agent'
     if (location.pathname.includes('/qr')) return 'Shop QR Code'
     if (location.pathname.includes('/history')) return 'Job History'
+    if (location.pathname.includes('/analytics')) return 'Analytics'
+    if (location.pathname.includes('/subscription')) return 'Subscription & Billing'
+    if (location.pathname.includes('/settings')) return 'Shop Settings'
+    if (location.pathname.includes('/notifications')) return 'Notifications'
+    if (location.pathname.includes('/profile')) return 'Shopkeeper Profile'
     return 'Dashboard'
   }
 
@@ -1284,13 +2020,31 @@ const ShopDashboard = () => {
             <Route index element={<DashboardHome shop={shop} stats={stats} refreshStats={fetchStats} socket={socket} refreshTrigger={refreshTrigger} onOpenEditModal={() => setEditModalOpen(true)} />} />
             <Route path="queue" element={<PrintQueue shop={shop} socket={socket} refreshTrigger={refreshTrigger} />} />
             <Route path="printers" element={<PrinterManagement shop={shop} socket={socket} refreshTrigger={refreshTrigger} />} />
+            <Route path="customers" element={<CustomersTab shop={shop} />} />
+            <Route path="payments" element={<PaymentsTab shop={shop} />} />
+            <Route path="agent" element={<AgentTab shop={shop} />} />
             <Route path="qr" element={<QRManagement shop={shop} />} />
             <Route path="history" element={<JobHistory shop={shop} socket={socket} refreshTrigger={refreshTrigger} />} />
+            <Route path="analytics" element={<AnalyticsTab shop={shop} stats={stats} />} />
+            <Route path="subscription" element={<SubscriptionTab shop={shop} onUpgrade={() => {}} />} />
+            <Route path="settings" element={<SettingsTab shop={shop} onUpdate={(updated) => setShop(updated)} />} />
+            <Route path="notifications" element={<NotificationsTab shop={shop} />} />
+            <Route path="profile" element={<ProfileTab shop={shop} onUpdate={(updated) => setShop(updated)} />} />
+
+            {/* Sub-paths when mounted at /shop/dashboard/* */}
             <Route path="dashboard" element={<DashboardHome shop={shop} stats={stats} refreshStats={fetchStats} socket={socket} refreshTrigger={refreshTrigger} onOpenEditModal={() => setEditModalOpen(true)} />} />
             <Route path="dashboard/queue" element={<PrintQueue shop={shop} socket={socket} refreshTrigger={refreshTrigger} />} />
             <Route path="dashboard/printers" element={<PrinterManagement shop={shop} socket={socket} refreshTrigger={refreshTrigger} />} />
+            <Route path="dashboard/customers" element={<CustomersTab shop={shop} />} />
+            <Route path="dashboard/payments" element={<PaymentsTab shop={shop} />} />
+            <Route path="dashboard/agent" element={<AgentTab shop={shop} />} />
             <Route path="dashboard/qr" element={<QRManagement shop={shop} />} />
             <Route path="dashboard/history" element={<JobHistory shop={shop} socket={socket} refreshTrigger={refreshTrigger} />} />
+            <Route path="dashboard/analytics" element={<AnalyticsTab shop={shop} stats={stats} />} />
+            <Route path="dashboard/subscription" element={<SubscriptionTab shop={shop} onUpgrade={() => {}} />} />
+            <Route path="dashboard/settings" element={<SettingsTab shop={shop} onUpdate={(updated) => setShop(updated)} />} />
+            <Route path="dashboard/notifications" element={<NotificationsTab shop={shop} />} />
+            <Route path="dashboard/profile" element={<ProfileTab shop={shop} onUpdate={(updated) => setShop(updated)} />} />
             <Route path="*" element={<DashboardHome shop={shop} stats={stats} refreshStats={fetchStats} socket={socket} refreshTrigger={refreshTrigger} onOpenEditModal={() => setEditModalOpen(true)} />} />
           </Routes>
         </div>

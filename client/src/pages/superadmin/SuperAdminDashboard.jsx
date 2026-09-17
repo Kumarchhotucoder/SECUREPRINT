@@ -5,7 +5,7 @@ import {
   Shield, Users, Store, Printer, Lock, CheckCircle, XCircle,
   AlertTriangle, RefreshCw, LogOut, Eye, Search, ToggleLeft, ToggleRight,
   ChevronRight, BarChart3, Activity, Clock, Plus, X, Edit2,
-  TrendingUp, IndianRupee, Zap, Home, UserPlus, Key, Package
+  TrendingUp, IndianRupee, Zap, Home, UserPlus, Key, Package, Link2, Copy
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../lib/api'
@@ -19,8 +19,10 @@ const fmtTime = (d) => d ? new Date(d).toLocaleString('en-IN', { hour: '2-digit'
 const BADGE = {
   VERIFIED: { bg: '#D1FAE5', color: '#065F46', label: 'Verified' },
   PENDING:  { bg: '#FEF3C7', color: '#92400E', label: 'Pending' },
+  PENDING_PAYMENT: { bg: '#FEF3C7', color: '#92400E', label: 'Payment Pending' },
   SUSPENDED:{ bg: '#FEE2E2', color: '#991B1B', label: 'Suspended' },
   REJECTED: { bg: '#FEE2E2', color: '#991B1B', label: 'Rejected' },
+  EXPIRED:  { bg: '#FEE2E2', color: '#991B1B', label: 'Expired' },
   ACTIVE:   { bg: '#D1FAE5', color: '#065F46', label: 'Active' },
   INACTIVE: { bg: '#F3F4F6', color: '#6B7280', label: 'Inactive' },
 }
@@ -52,7 +54,7 @@ const StatCard = ({ icon, label, value, sub, color = 'var(--color-primary)', gra
 const CreateShopModal = ({ onClose, onCreated }) => {
   const [form, setForm] = useState({
     shopName: '', shopPhone: '', shopEmail: '', shopAddress: '',
-    ownerName: '', ownerEmail: '', ownerPassword: ''
+    ownerName: '', ownerEmail: '', ownerPassword: '', plan: 'STARTER'
   })
   const [saving, setSaving] = useState(false)
   const [created, setCreated] = useState(null)
@@ -69,7 +71,7 @@ const CreateShopModal = ({ onClose, onCreated }) => {
     try {
       const res = await api.post('/admin/shops', form)
       setCreated(res.data.data)
-      toast.success(`Shop "${form.shopName}" created!`)
+      toast.success(`Shop "${form.shopName}" created! Subscription payment pending.`)
       onCreated()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to create shop')
@@ -80,20 +82,43 @@ const CreateShopModal = ({ onClose, onCreated }) => {
     <div style={overlayStyle}>
       <div style={modalStyle}>
         <div style={{ textAlign: 'center', padding: 'var(--space-6)' }}>
-          <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto var(--space-4)', color: '#065F46' }}>
-            <CheckCircle size={32} />
+          <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto var(--space-4)', color: '#92400E' }}>
+            <Clock size={32} />
           </div>
-          <h3 style={{ marginBottom: 'var(--space-2)' }}>Shop Created! 🎉</h3>
-          <p style={{ color: 'var(--color-text-secondary)', marginBottom: 'var(--space-6)' }}>
-            Share these credentials with the shopkeeper.
+          <h3 style={{ marginBottom: 'var(--space-2)' }}>Shop Created Successfully!</h3>
+          <div style={{ display: 'inline-block', background: '#FEF3C7', color: '#92400E', padding: '4px 14px', borderRadius: 16, fontWeight: 700, fontSize: 13, marginBottom: 'var(--space-3)' }}>
+            🟡 Subscription Payment Pending
+          </div>
+          <p style={{ color: 'var(--color-text-secondary)', fontSize: 13, marginBottom: 'var(--space-5)' }}>
+            This shop will remain locked until subscription payment is completed and verified.
           </p>
-          <div style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-5)', textAlign: 'left', marginBottom: 'var(--space-4)' }}>
-            <div style={{ marginBottom: 8 }}><strong>Shop:</strong> {created.shop?.name}</div>
-            <div style={{ marginBottom: 8 }}><strong>Shop URL:</strong> <code style={{ fontSize: 12, background: '#F1F5F9', padding: '2px 6px', borderRadius: 4 }}>{created.shop?.permanentQrTargetUrl}</code></div>
-            <div style={{ marginBottom: 8 }}><strong>Login Email:</strong> {created.shopkeeperCredentials?.email}</div>
-            <div><strong>Password:</strong> <code style={{ fontSize: 12, background: '#FEF3C7', padding: '2px 6px', borderRadius: 4 }}>{created.shopkeeperCredentials?.password}</code></div>
+          <div style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)', textAlign: 'left', marginBottom: 'var(--space-4)', fontSize: 13 }}>
+            <div style={{ marginBottom: 6 }}><strong>Shop:</strong> {created.shop?.name}</div>
+            <div style={{ marginBottom: 6 }}><strong>Plan:</strong> {created.shop?.subscription?.plan || form.plan} (₹{created.shop?.subscription?.monthlyPrice || 499}/mo)</div>
+            <div style={{ marginBottom: 6 }}><strong>Login Email:</strong> {created.shopkeeperCredentials?.email}</div>
+            <div style={{ marginBottom: 8 }}><strong>Password:</strong> <code style={{ fontSize: 12, background: '#FEF3C7', padding: '2px 6px', borderRadius: 4 }}>{created.shopkeeperCredentials?.password}</code></div>
+            <div>
+              <strong>Payment Link:</strong>
+              <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                <input readOnly className="input" style={{ fontSize: 11, padding: '4px 8px', height: 32 }} value={`${window.location.origin}${created.paymentLink || `/subscription/pay/${created.paymentToken}`}`} />
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}${created.paymentLink || `/subscription/pay/${created.paymentToken}`}`)
+                  toast.success('Payment link copied to clipboard!')
+                }}>
+                  Copy
+                </button>
+              </div>
+            </div>
           </div>
-          <button className="btn btn-primary w-full" onClick={onClose}>Done</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => {
+              navigator.clipboard.writeText(`${window.location.origin}${created.paymentLink || `/subscription/pay/${created.paymentToken}`}`)
+              toast.success('Payment link copied!')
+            }}>
+              <Copy size={15} /> Copy Link
+            </button>
+            <button className="btn btn-primary" style={{ flex: 1 }} onClick={onClose}>Done</button>
+          </div>
         </div>
       </div>
     </div>
@@ -128,6 +153,15 @@ const CreateShopModal = ({ onClose, onCreated }) => {
             <div className="input-group">
               <label className="input-label">Address (Street, City, State, Pincode)</label>
               <input className="input" value={form.shopAddress} onChange={e => set('shopAddress', e.target.value)} placeholder="MG Road, Pune, Maharashtra, 411001" />
+            </div>
+
+            <div className="input-group">
+              <label className="input-label">Subscription Plan *</label>
+              <select className="input" value={form.plan} onChange={e => set('plan', e.target.value)}>
+                <option value="STARTER">Starter Print Partner (₹499/month)</option>
+                <option value="PRO">Pro Printing Center (₹999/month)</option>
+                <option value="ENTERPRISE">Commercial Print Hub (₹2,499/month)</option>
+              </select>
             </div>
 
             <div style={{ padding: '12px 16px', background: '#EDE9FE', borderRadius: 'var(--radius-md)', fontWeight: 700, color: '#5B21B6', fontSize: 13, marginTop: 4 }}>
@@ -631,7 +665,7 @@ const SuperAdminDashboard = () => {
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: 'var(--color-bg)' }}>
-                        {['#', 'Shop', 'Slug', 'Shopkeeper', 'Verification', 'Status', 'Created', 'Actions'].map(h => (
+                        {['#', 'Shop', 'Slug', 'Shopkeeper', 'Plan', 'Subscription', 'Status', 'Created', 'Actions'].map(h => (
                           <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
                         ))}
                       </tr>
@@ -652,8 +686,32 @@ const SuperAdminDashboard = () => {
                             <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{shop.ownerId?.email || ''}</div>
                           </td>
                           <td style={{ padding: '12px 14px' }}>
-                            <StatusBadge label={BADGE[shop.verificationStatus]?.label || shop.verificationStatus}
-                              style={BADGE[shop.verificationStatus] || {}} />
+                            <span style={{ fontWeight: 700, fontSize: 12, color: 'var(--color-primary)' }}>
+                              {shop.subscription?.plan || 'STARTER'}
+                            </span>
+                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                              ₹{shop.subscription?.monthlyPrice || 499}/mo
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 14px' }}>
+                            <StatusBadge
+                              label={BADGE[shop.subscription?.status || shop.status]?.label || (shop.subscription?.status || shop.status || 'PENDING')}
+                              style={BADGE[shop.subscription?.status || shop.status] || BADGE.PENDING}
+                            />
+                            {shop.subscription?.paymentToken && shop.subscription?.status !== 'ACTIVE' && (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-xs"
+                                style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, fontSize: 10, padding: '2px 6px', color: 'var(--color-primary)' }}
+                                onClick={() => {
+                                  navigator.clipboard.writeText(`${window.location.origin}/subscription/pay/${shop.subscription.paymentToken}`)
+                                  toast.success('Payment link copied!')
+                                }}
+                                title="Copy Payment Link"
+                              >
+                                <Link2 size={11} /> Copy Pay Link
+                              </button>
+                            )}
                           </td>
                           <td style={{ padding: '12px 14px' }}>
                             <StatusBadge label={shop.isActive ? 'Active' : 'Inactive'} style={shop.isActive ? BADGE.ACTIVE : BADGE.INACTIVE} />
@@ -676,7 +734,7 @@ const SuperAdminDashboard = () => {
                         </tr>
                       ))}
                       {!filteredShops.length && (
-                        <tr><td colSpan={8} style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                        <tr><td colSpan={9} style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--color-text-muted)' }}>
                           {shopSearch ? 'No shops match your search.' : 'No shops yet. Click "Add Shop" to create one.'}
                         </td></tr>
                       )}

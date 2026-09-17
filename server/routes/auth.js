@@ -142,7 +142,7 @@ router.post('/logout', authenticate, async (req, res, next) => {
 // POST /api/auth/register-shop — Onboard new shop owner with permanent QR and shop setup
 router.post('/register-shop', async (req, res, next) => {
   try {
-    const { name, email, password, shopName, phone, address, pricing, planId = 'TRIAL' } = req.body;
+    const { name, email, password, shopName, slug, phone, address, pricing, planId = 'TRIAL' } = req.body;
     if (!name || !email || !password || !shopName || !phone) {
       return res.status(400).json({ success: false, message: 'All required fields must be provided.' });
     }
@@ -161,12 +161,12 @@ router.post('/register-shop', async (req, res, next) => {
       });
     }
 
-    // 1. Create shopkeeper user
+    // 1. Create shop owner user
     const user = new User({
       name,
       email: email.toLowerCase(),
       passwordHash: password,
-      role: 'SHOPKEEPER'
+      role: 'SHOP_OWNER'
     });
     await user.save();
 
@@ -174,20 +174,30 @@ router.post('/register-shop', async (req, res, next) => {
     const Shop = require('../models/Shop');
     const QRCode = require('qrcode');
 
+    // Generate secure payment token for subscription onboarding link
+    const crypto = require('crypto');
+    const paymentToken = crypto.randomBytes(24).toString('hex');
+    const selectedPlan = planId || 'STARTER';
+    const monthlyPrice = selectedPlan === 'PRO' ? 999 : selectedPlan === 'ENTERPRISE' ? 2499 : 499;
+
     const shop = new Shop({
       name: shopName,
+      slug: slug ? slug.toLowerCase().trim() : undefined,
       ownerId: user._id,
       phone,
       email: email.toLowerCase(),
       address: address || {},
       pricing: pricing || { bwPerPage: 2, colorPerPage: 10, currency: 'INR' },
       isSetupComplete: true,
-      isActive: true,
-      verificationStatus: 'VERIFIED',
+      status: 'PENDING_PAYMENT',
+      isActive: false,
+      verificationStatus: 'PENDING',
       subscription: {
-        plan: planId,
-        status: 'ACTIVE',
-        validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        plan: selectedPlan,
+        status: 'PENDING',
+        monthlyPrice,
+        paymentToken,
+        paymentTokenExpiresAt: new Date(Date.now() + 30 * 86400000)
       }
     });
     await shop.save();
@@ -209,7 +219,7 @@ router.post('/register-shop', async (req, res, next) => {
     await logEvent('SHOP_REGISTERED', {
       userId: user._id,
       shopId: shop._id,
-      metadata: { shopName: shop.name, plan: planId }
+      metadata: { shopName: shop.name, plan: selectedPlan, status: 'PENDING_PAYMENT' }
     });
 
     res.status(201).json({
@@ -218,8 +228,12 @@ router.post('/register-shop', async (req, res, next) => {
         userId: user._id,
         shopId: shop._id,
         slug: shop.slug,
+        status: 'PENDING_PAYMENT',
+        subscriptionStatus: 'PENDING',
+        paymentToken,
+        paymentLink: `/subscription/pay/${paymentToken}`,
         permanentQrTargetUrl: qrTarget,
-        message: 'Shop and owner registered successfully!'
+        message: 'Shop registered! Subscription payment required to activate operational access.'
       }
     });
   } catch (err) {

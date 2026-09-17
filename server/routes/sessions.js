@@ -22,11 +22,13 @@ router.post('/start-by-slug', sessionLimiter, async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Shop not found.' });
     }
 
-    if (!shop.isActive) {
+    const isOperational = shop.status === 'ACTIVE' && shop.isActive && shop.subscription?.status === 'ACTIVE';
+    if (!isOperational) {
       return res.status(503).json({
         success: false,
         isInactive: true,
-        message: 'This SecurePrint shop is currently unavailable.'
+        code: 'SHOP_INACTIVE',
+        message: 'This shop is currently not accepting print requests. Please try again later.'
       });
     }
 

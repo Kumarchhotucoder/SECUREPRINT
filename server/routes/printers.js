@@ -10,7 +10,7 @@ const PrintAttempt = require('../models/PrintAttempt');
 const PrintJob = require('../models/PrintJob');
 const Document = require('../models/Document');
 const Shop = require('../models/Shop');
-const { authenticate, requireShopkeeper } = require('../middleware/auth');
+const { authenticate, requireShopkeeper, requireActiveSubscription } = require('../middleware/auth');
 const { logEvent, getRequestMeta } = require('../utils/audit');
 const { getFileBuffer } = require('../utils/storage');
 
@@ -35,7 +35,17 @@ const authenticateAgent = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Agent device not recognized.' });
     }
 
+    const shop = await Shop.findById(decoded.shopId);
+    if (!shop || shop.status !== 'ACTIVE' || !shop.isActive || shop.subscription?.status !== 'ACTIVE') {
+      return res.status(403).json({
+        success: false,
+        code: 'SUBSCRIPTION_REQUIRED',
+        message: 'Your SecurePrint subscription is inactive. Please complete your subscription payment.'
+      });
+    }
+
     req.agent = agent;
+    req.shop = shop;
     req.shopId = decoded.shopId;
     next();
   } catch (err) {
@@ -58,8 +68,8 @@ const findShopPrinter = async (idOrPrinterId, shopId, populateAgent = false) => 
   return await q;
 };
 
-// ── 1. GET /api/printers — List printers for authenticated shop
-router.get('/', authenticate, requireShopkeeper, async (req, res, next) => {
+// ── 1. GET /api/printers — Shopkeeper lists their registered printers (requires active subscription)
+router.get('/', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user._id });
     if (!shop) return res.status(404).json({ success: false, message: 'Shop not found.' });
@@ -69,11 +79,20 @@ router.get('/', authenticate, requireShopkeeper, async (req, res, next) => {
       Agent.find({ shopId: shop._id }).sort({ lastSeenAt: -1 })
     ]);
 
+    const activeAgent = agents.find(a => a.status === 'ONLINE' && (Date.now() - new Date(a.lastSeenAt).getTime() < 3 * 60 * 1000)) || null;
+
     res.json({
       success: true,
       data: {
         printers,
-        agents
+        agents,
+        isAgentOnline: Boolean(activeAgent),
+        activeAgent: activeAgent ? {
+          agentId: activeAgent.agentId,
+          computerName: activeAgent.computerName,
+          status: activeAgent.status,
+          lastSeenAt: activeAgent.lastSeenAt
+        } : null
       }
     });
   } catch (err) {
@@ -81,8 +100,8 @@ router.get('/', authenticate, requireShopkeeper, async (req, res, next) => {
   }
 });
 
-// ── 2. POST /api/printers/pairing-code — Generate 6-digit code for shop computer
-router.post('/pairing-code', authenticate, requireShopkeeper, async (req, res, next) => {
+// ── 2. POST /api/printers/pairing-code — Generate 6-digit code for shop computer (requires active subscription)
+router.post('/pairing-code', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user._id });
     if (!shop) return res.status(404).json({ success: false, message: 'Shop not found.' });
@@ -142,6 +161,15 @@ router.post('/pair', async (req, res, next) => {
     const shop = await Shop.findById(agent.shopId);
     if (!shop) {
       return res.status(404).json({ success: false, message: 'Associated shop not found.' });
+    }
+
+    // State machine check: Agent pairing is only allowed for ACTIVE subscribed shops
+    if (shop.status !== 'ACTIVE' || !shop.isActive || shop.subscription?.status !== 'ACTIVE') {
+      return res.status(403).json({
+        success: false,
+        code: 'SUBSCRIPTION_REQUIRED',
+        message: 'Your SecurePrint subscription is inactive. Please complete your subscription payment.'
+      });
     }
 
     // Issue permanent agent credentials
@@ -217,9 +245,9 @@ router.post('/sync', authenticateAgent, async (req, res, next) => {
           systemPrinterName,
           name: p.name || systemPrinterName,
           connectionType: p.connectionType || 'WINDOWS_INSTALLED',
-          isColorCapable: Boolean(p.isColorCapable),
-          supportsDuplex: Boolean(p.supportsDuplex),
-          paperSizes: p.paperSizes && p.paperSizes.length ? p.paperSizes : ['A4', 'Letter'],
+          isColorCapable: Boolean(p.isColorCapable || p.capabilities?.color),
+          supportsDuplex: Boolean(p.supportsDuplex || p.capabilities?.duplex),
+          paperSizes: (p.paperSizes && p.paperSizes.length) ? p.paperSizes : (p.capabilities?.paperSizes || ['A4', 'Letter']),
           isDefault: Boolean(p.isDefault),
           status: p.status || 'READY',
           statusDetails: p.statusDetails || '',
@@ -229,9 +257,14 @@ router.post('/sync', authenticateAgent, async (req, res, next) => {
         printer.status = p.status || 'READY';
         printer.statusDetails = p.statusDetails || '';
         printer.connectionType = p.connectionType || printer.connectionType;
-        if (p.isColorCapable !== undefined) printer.isColorCapable = Boolean(p.isColorCapable);
-        if (p.supportsDuplex !== undefined) printer.supportsDuplex = Boolean(p.supportsDuplex);
-        if (p.paperSizes && p.paperSizes.length) printer.paperSizes = p.paperSizes;
+        if (p.isColorCapable !== undefined || p.capabilities?.color !== undefined) {
+          printer.isColorCapable = Boolean(p.isColorCapable || p.capabilities?.color);
+        }
+        if (p.supportsDuplex !== undefined || p.capabilities?.duplex !== undefined) {
+          printer.supportsDuplex = Boolean(p.supportsDuplex || p.capabilities?.duplex);
+        }
+        const sizes = p.paperSizes || p.capabilities?.paperSizes;
+        if (sizes && sizes.length) printer.paperSizes = sizes;
         printer.lastSeenAt = new Date();
       }
       await printer.save();
@@ -260,8 +293,8 @@ router.post('/sync', authenticateAgent, async (req, res, next) => {
   }
 });
 
-// ── 5. PATCH /api/printers/:id — Update printer configuration
-router.patch('/:id', authenticate, requireShopkeeper, async (req, res, next) => {
+// ── 5. PATCH /api/printers/:id — Update printer settings (requires active subscription)
+router.patch('/:id', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user._id });
     if (!shop) return res.status(404).json({ success: false, message: 'Shop not found.' });
@@ -287,8 +320,8 @@ router.patch('/:id', authenticate, requireShopkeeper, async (req, res, next) => 
   }
 });
 
-// ── 6. POST /api/printers/jobs/:jobId/print — Command print to physical printer
-router.post('/jobs/:jobId/print', authenticate, requireShopkeeper, async (req, res, next) => {
+// ── 6. POST /api/printers/jobs/:jobId/print — Command print to physical printer (requires active subscription)
+router.post('/jobs/:jobId/print', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
   try {
     const { printerId, copies = 1, colorMode = 'BW', paperSize = 'A4', duplex = false, orientation = 'PORTRAIT', pageRange = 'ALL' } = req.body;
 
@@ -307,6 +340,17 @@ router.post('/jobs/:jobId/print', authenticate, requireShopkeeper, async (req, r
     const job = await PrintJob.findOne({ _id: req.params.jobId, shopId: shop._id });
     if (!job) return res.status(404).json({ success: false, message: 'Job not found in this shop.' });
 
+    // Critical Document Lifecycle Check (Part G & Q)
+    if (job.filesDeleted || job.deletedAt || job.status === 'DELETED') {
+      return res.status(410).json({
+        success: false,
+        error: {
+          code: 'DOCUMENT_ALREADY_DELETED',
+          message: 'Document has already been deleted for privacy and cannot be printed again.'
+        }
+      });
+    }
+
     // Validate printer
     let printer;
     if (printerId) {
@@ -320,13 +364,43 @@ router.post('/jobs/:jobId/print', authenticate, requireShopkeeper, async (req, r
     if (!printer) {
       return res.status(400).json({
         success: false,
-        message: 'No printer connected. Please connect a computer with SecurePrint Print Agent or use manual print fallback.'
+        error: {
+          code: 'NO_PRINTERS_FOUND',
+          message: 'No connected printers found. Make sure your Shop Computer is running the SecurePrint Agent, or use Manual Print below.'
+        }
       });
     }
 
     const agent = printer.agentId;
     if (!agent) {
-      return res.status(400).json({ success: false, message: 'Print agent associated with this printer was not found.' });
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'AGENT_NOT_REGISTERED',
+          message: 'Print agent associated with this printer was not found.'
+        }
+      });
+    }
+
+    const isAgentOnline = agent.status === 'ONLINE' && (Date.now() - new Date(agent.lastSeenAt || 0).getTime() < 3 * 60 * 1000);
+    if (!isAgentOnline) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'AGENT_OFFLINE',
+          message: 'Shop computer running SecurePrint Agent is currently offline. Please start the Print Agent on your counter PC.'
+        }
+      });
+    }
+
+    if (printer.status === 'OFFLINE') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'PRINTER_OFFLINE',
+          message: `Selected printer "${printer.name}" is currently offline. Please check power and cables.`
+        }
+      });
     }
 
     // Enforce color capability
@@ -501,8 +575,8 @@ router.post('/attempts/:attemptId/status', authenticateAgent, async (req, res, n
   }
 });
 
-// ── 9. POST /api/printers/:id/test-print — Generate branded test print
-router.post('/:id/test-print', authenticate, requireShopkeeper, async (req, res, next) => {
+// ── 9. POST /api/printers/:id/test-print — Send a test print page (requires active subscription)
+router.post('/:id/test-print', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user._id });
     if (!shop) return res.status(404).json({ success: false, message: 'Shop not found.' });

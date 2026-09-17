@@ -52,13 +52,16 @@ const requireAdmin = (req, res, next) => {
 };
 
 /**
- * Require SHOPKEEPER role (or Admin).
+ * Require SHOP_OWNER, SHOP_STAFF, SHOPKEEPER, or Admin role.
  */
 const requireShopkeeper = (req, res, next) => {
-  if (!req.user || !['SHOPKEEPER', 'ADMIN', 'SUPER_ADMIN'].includes(req.user.role)) {
-    return res.status(403).json({ success: false, message: 'Shopkeeper access required.' });
+  const allowed = ['SHOP_OWNER', 'SHOP_STAFF', 'SHOPKEEPER', 'ADMIN', 'SUPER_ADMIN'];
+  if (!req.user || !allowed.includes(req.user.role)) {
+    return res.status(403).json({ success: false, message: 'Shop Owner / Staff access required.' });
   }
   next();
 };
 
-module.exports = { authenticate, requireAdmin, requireShopkeeper };
+const { requireActiveSubscription } = require('./requireSubscription');
+
+module.exports = { authenticate, requireAdmin, requireShopkeeper, requireActiveSubscription };

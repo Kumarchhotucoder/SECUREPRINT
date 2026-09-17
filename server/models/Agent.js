@@ -59,7 +59,13 @@ const agentSchema = new mongoose.Schema({
     default: '1.0.0'
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+agentSchema.virtual('tenant_id').get(function () {
+  return this.shopId;
 });
 
 agentSchema.index({ shopId: 1, status: 1 });

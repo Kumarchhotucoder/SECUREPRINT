@@ -1,10 +1,11 @@
 const mongoose = require('mongoose');
 
 const JOB_STATUSES = [
-  'CREATED', 'READY', 'RECEIVED', 'PRINTING',
-  'PRINTING_COMPLETED', 'AWAITING_PAYMENT', 'PAYMENT_PROCESSING',
-  'PAID', 'CLEANUP_COUNTDOWN', 'COMPLETED',
-  'FAILED', 'EXPIRED', 'CANCELLED', 'DELETED'
+  'REQUEST_SENT', 'CREATED', 'SHOP_RECEIVED', 'RECEIVED', 'READY', 'PRINTING',
+  'PRINTING_COMPLETED', 'AWAITING_PAYMENT', 'PAYMENT_METHOD_SELECTED', 'PAYMENT_PROCESSING',
+  'CASH_PAYMENT_PENDING', 'CASH_PAYMENT_CONFIRMED', 'PAID', 'PAYMENT_SUCCESS',
+  'CLEANUP_PENDING', 'CLEANUP_COUNTDOWN', 'FILES_DELETED', 'JOB_CLOSED',
+  'COMPLETED', 'FAILED', 'EXPIRED', 'CANCELLED', 'DELETED'
 ];
 
 const printJobSchema = new mongoose.Schema({
@@ -54,6 +55,16 @@ const printJobSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  orientation: {
+    type: String,
+    enum: ['PORTRAIT', 'LANDSCAPE'],
+    default: 'PORTRAIT'
+  },
+  pageRange: {
+    type: String,
+    trim: true,
+    default: 'ALL'
+  },
   pagesPerSheet: {
     type: Number,
     enum: [1, 2, 4],
@@ -78,9 +89,19 @@ const printJobSchema = new mongoose.Schema({
   // Payment tracking
   paymentStatus: {
     type: String,
-    enum: ['PENDING', 'PROCESSING', 'PAID', 'FAILED', 'CANCELLED'],
+    enum: [
+      'NOT_REQUIRED', 'PENDING', 'AWAITING_PAYMENT', 'PAYMENT_PENDING_CASH',
+      'CASH_PAYMENT_PENDING', 'CASH_PAYMENT_CONFIRMED', 'PROCESSING',
+      'PAYMENT_PROCESSING', 'PAID', 'PAYMENT_SUCCESS', 'FAILED',
+      'PAYMENT_FAILED', 'CANCELLED', 'PAYMENT_CANCELLED'
+    ],
     default: 'PENDING',
     index: true
+  },
+  paymentMethod: {
+    type: String,
+    enum: ['ONLINE', 'CASH', 'UPI', 'RAZORPAY', null],
+    default: null
   },
   paymentId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -137,7 +158,12 @@ const printJobSchema = new mongoose.Schema({
     type: String,
     maxlength: 500
   }
-}, { timestamps: true });
+}, { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });
+
+// Virtual tenant_id mapping for strict tenant isolation
+printJobSchema.virtual('tenant_id').get(function () {
+  return this.shopId;
+});
 
 // Auto-increment job number
 printJobSchema.pre('save', async function () {

@@ -4,7 +4,9 @@ const QRCode = require('qrcode');
 const Shop = require('../models/Shop');
 const PrintJob = require('../models/PrintJob');
 const PrintSession = require('../models/PrintSession');
-const { authenticate, requireAdmin, requireShopkeeper } = require('../middleware/auth');
+const Printer = require('../models/Printer');
+const Agent = require('../models/Agent');
+const { authenticate, requireAdmin, requireShopkeeper, requireActiveSubscription } = require('../middleware/auth');
 const { generateSecureToken, hashToken } = require('../utils/crypto');
 const { logEvent, getRequestMeta } = require('../utils/audit');
 const { getTodayRangeIST } = require('../utils/timezone');
@@ -67,8 +69,8 @@ router.get('/my', authenticate, requireShopkeeper, async (req, res, next) => {
   }
 });
 
-// PUT /api/shops/my — shopkeeper updates their counter details & pricing
-router.put('/my', authenticate, requireShopkeeper, async (req, res, next) => {
+// PUT /api/shops/my — shopkeeper updates their counter details & pricing (requires active subscription)
+router.put('/my', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user._id });
     if (!shop) {
@@ -142,16 +144,21 @@ router.get('/by-slug/:slug', async (req, res, next) => {
     if (!shop) {
       return res.status(404).json({ success: false, message: 'Shop not found with this QR or link.' });
     }
-    if (!shop.isActive) {
+    // Public QR check: Shop must be ACTIVE and have an active subscription
+    const isOperational = shop.status === 'ACTIVE' && shop.isActive && shop.subscription?.status === 'ACTIVE';
+    if (!isOperational) {
       return res.json({
         success: false,
         isInactive: true,
-        message: 'This SecurePrint shop is currently unavailable.',
+        message: 'This shop is currently not accepting print requests. Please try again later.',
         data: {
           id: shop._id,
           name: shop.name,
           slug: shop.slug,
-          isActive: false
+          status: shop.status,
+          isActive: false,
+          isInactive: true,
+          message: 'This shop is currently not accepting print requests. Please try again later.'
         }
       });
     }
@@ -254,8 +261,8 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-// POST /api/shops/:id/qr — refresh/ensure permanent shop QR
-router.post('/:id/qr', authenticate, requireShopkeeper, async (req, res, next) => {
+// POST /api/shops/:id/qr — refresh/ensure permanent shop QR (requires active subscription)
+router.post('/:id/qr', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
   try {
     const shop = await Shop.findOne({ _id: req.params.id, ownerId: req.user._id });
     if (!shop) {
@@ -287,8 +294,8 @@ router.post('/:id/qr', authenticate, requireShopkeeper, async (req, res, next) =
   }
 });
 
-// GET /api/shops/:id/jobs — get shop's print jobs (shopkeeper only)
-router.get('/:id/jobs', authenticate, requireShopkeeper, async (req, res, next) => {
+// GET /api/shops/:id/jobs — get shop's print jobs (requires active subscription)
+router.get('/:id/jobs', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
   try {
     const shop = await Shop.findOne({ _id: req.params.id, ownerId: req.user._id });
     if (!shop) {
@@ -313,8 +320,8 @@ router.get('/:id/jobs', authenticate, requireShopkeeper, async (req, res, next) 
   }
 });
 
-// GET /api/shops/:id/stats — dashboard stats with accurate Asia/Kolkata (IST) daily reset
-router.get('/:id/stats', authenticate, requireShopkeeper, async (req, res, next) => {
+// GET /api/shops/:id/stats — dashboard stats (requires active subscription)
+router.get('/:id/stats', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
   try {
     const shop = await Shop.findOne({ _id: req.params.id, ownerId: req.user._id });
     if (!shop) return res.status(403).json({ success: false, message: 'Access denied.' });
@@ -322,9 +329,24 @@ router.get('/:id/stats', authenticate, requireShopkeeper, async (req, res, next)
     // Precise Asia/Kolkata midnight boundaries
     const { startOfDayIST, endOfDayIST, formattedDateIST } = getTodayRangeIST();
 
-    const [active, pending, todayCompleted, todayJobsDocs, todaySessions, totalCustomers, allCompletedDocs] = await Promise.all([
+    const [
+      active,
+      pending,
+      printing,
+      pendingPayments,
+      todayCompleted,
+      todayJobsDocs,
+      todaySessions,
+      totalCustomers,
+      allCompletedDocs,
+      totalPrinters,
+      activePrintersCount,
+      onlineAgentsCount
+    ] = await Promise.all([
       PrintJob.countDocuments({ shopId: shop._id, status: { $in: ['RECEIVED', 'PRINTING'] } }),
-      PrintJob.countDocuments({ shopId: shop._id, status: 'READY' }),
+      PrintJob.countDocuments({ shopId: shop._id, status: { $in: ['READY', 'CREATED'] } }),
+      PrintJob.countDocuments({ shopId: shop._id, status: { $in: ['PRINTING', 'RECEIVED'] } }),
+      PrintJob.countDocuments({ shopId: shop._id, status: 'AWAITING_PAYMENT' }),
       PrintJob.countDocuments({
         shopId: shop._id,
         status: { $in: ['COMPLETED', 'CLEANUP_COUNTDOWN', 'AWAITING_PAYMENT'] },
@@ -333,7 +355,10 @@ router.get('/:id/stats', authenticate, requireShopkeeper, async (req, res, next)
       PrintJob.find({ shopId: shop._id, createdAt: { $gte: startOfDayIST, $lte: endOfDayIST } }),
       PrintSession.countDocuments({ shopId: shop._id, createdAt: { $gte: startOfDayIST, $lte: endOfDayIST } }),
       PrintSession.countDocuments({ shopId: shop._id }),
-      PrintJob.find({ shopId: shop._id, status: 'COMPLETED' })
+      PrintJob.find({ shopId: shop._id, status: 'COMPLETED' }),
+      Printer.countDocuments({ shopId: shop._id }),
+      Printer.countDocuments({ shopId: shop._id, isEnabled: true, status: { $in: ['READY', 'PRINTING'] } }),
+      Agent.countDocuments({ shopId: shop._id, status: 'ONLINE' })
     ]);
 
     const todayPages = todayJobsDocs.reduce((sum, j) => sum + (j.totalPages * (j.copies || 1)), 0);
@@ -346,11 +371,22 @@ router.get('/:id/stats', authenticate, requireShopkeeper, async (req, res, next)
       .filter(j => j.paymentStatus === 'PAID')
       .reduce((sum, j) => sum + (j.finalPrice || j.estimatedPrice || 0), 0);
 
+    const activePrintersDisplay = totalPrinters > 0 ? `${activePrintersCount}/${totalPrinters}` : '0/0';
+    const agentStatus = onlineAgentsCount > 0 ? 'ONLINE' : 'OFFLINE';
+
     res.json({
       success: true,
       data: {
         active,
         pending,
+        pendingJobs: pending,
+        printingJobs: printing,
+        completedJobs: todayCompleted,
+        pendingPayments,
+        activePrinters: activePrintersDisplay,
+        activePrintersCount,
+        totalPrinters,
+        agentStatus,
         completed: todayCompleted,
         todayJobs: todayJobsDocs.length,
         todayCustomers: todaySessions,

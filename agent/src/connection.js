@@ -133,6 +133,18 @@ class AgentConnection {
       this.logger.error(`[Agent] Connection error: ${err.message}`);
     });
 
+    // Listen for agent subscription/authorization rejection
+    this.socket.on('agent-error', (errData) => {
+      if (errData?.reason === 'SUBSCRIPTION_REQUIRED') {
+        this.logger.error(`\n[Agent] ====================================================`);
+        this.logger.error(`[Agent] ACCESS REJECTED: SUBSCRIPTION REQUIRED`);
+        this.logger.error(`[Agent] "${errData.message || 'Your SecurePrint subscription is inactive. Please complete your subscription payment.'}"`);
+        this.logger.error(`[Agent] ====================================================\n`);
+      } else {
+        this.logger.error(`[Agent] Error from cloud:`, errData?.message || errData);
+      }
+    });
+
     // Listen for incoming print jobs
     this.socket.on('print-job', (jobData) => {
       this.logger.info(`[Agent] Received print-job event from cloud:`, jobData.attemptId);

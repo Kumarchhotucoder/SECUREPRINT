@@ -38,7 +38,7 @@ const printerSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['READY', 'OFFLINE', 'ERROR', 'PAPER_OUT', 'PAPER_JAM', 'LOW_INK', 'LOW_TONER', 'BUSY', 'UNKNOWN'],
+    enum: ['READY', 'ONLINE', 'OFFLINE', 'ERROR', 'PAPER_OUT', 'PAPER_JAM', 'LOW_INK', 'LOW_TONER', 'BUSY', 'UNKNOWN'],
     default: 'READY',
     index: true
   },
@@ -71,7 +71,13 @@ const printerSchema = new mongoose.Schema({
     default: Date.now
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+printerSchema.virtual('tenant_id').get(function () {
+  return this.shopId;
 });
 
 printerSchema.index({ shopId: 1, isEnabled: 1, status: 1 });

@@ -40,8 +40,18 @@ const documentSchema = new mongoose.Schema({
     select: false
   },
   // Soft-delete: when set, file access is revoked
+  status: {
+    type: String,
+    enum: ['ACTIVE', 'DELETED'],
+    default: 'ACTIVE'
+  },
   deletedAt: {
     type: Date,
+    default: null
+  },
+  jobId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'PrintJob',
     default: null
   },
   // Order for display
@@ -49,7 +59,11 @@ const documentSchema = new mongoose.Schema({
     type: Number,
     default: 0
   }
-}, { timestamps: true });
+}, { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });
+
+documentSchema.virtual('tenant_id').get(function () {
+  return this.shopId;
+});
 
 // Only return non-deleted documents by default
 documentSchema.index({ sessionId: 1, deletedAt: 1 });

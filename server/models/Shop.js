@@ -47,25 +47,37 @@ const shopSchema = new mongoose.Schema({
     enum: ['PENDING', 'VERIFIED', 'SUSPENDED', 'REJECTED'],
     default: 'PENDING'
   },
+  // Shop Lifecycle State Machine (PENDING_PAYMENT -> ACTIVE -> EXPIRED / SUSPENDED / CANCELLED)
+  status: {
+    type: String,
+    enum: ['PENDING_PAYMENT', 'ACTIVE', 'SUSPENDED', 'EXPIRED', 'CANCELLED'],
+    default: 'PENDING_PAYMENT',
+    index: true
+  },
   isActive: {
     type: Boolean,
-    default: true
+    default: false
   },
   // SaaS Subscription (Shop Owner -> SecurePrint)
   subscription: {
     plan: {
       type: String,
-      enum: ['TRIAL', 'STARTER', 'PRO', 'ENTERPRISE'],
-      default: 'TRIAL'
+      enum: ['STARTER', 'PRO', 'ENTERPRISE', 'TRIAL'],
+      default: 'STARTER'
     },
     status: {
       type: String,
-      enum: ['TRIAL', 'ACTIVE', 'PAYMENT_PENDING', 'EXPIRED', 'SUSPENDED', 'CANCELLED'],
-      default: 'ACTIVE'
+      enum: ['PENDING', 'ACTIVE', 'PAST_DUE', 'EXPIRED', 'CANCELLED', 'TRIAL'],
+      default: 'PENDING',
+      index: true
+    },
+    startedAt: {
+      type: Date,
+      default: null
     },
     validUntil: {
       type: Date,
-      default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // Default 30-day active window
+      default: null
     },
     paymentId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -73,6 +85,17 @@ const shopSchema = new mongoose.Schema({
       default: null
     },
     monthlyPrice: {
+      type: Number,
+      default: 499
+    },
+    paymentToken: {
+      type: String,
+      index: true
+    },
+    paymentTokenExpiresAt: {
+      type: Date
+    },
+    gracePeriodDays: {
       type: Number,
       default: 0
     }
@@ -106,6 +129,14 @@ const shopSchema = new mongoose.Schema({
   supportedPaperSizes: {
     type: [String],
     default: ['A4', 'A3', 'Letter']
+  },
+  // Custom UPI ID for shopkeeper payment QR (defaults to slug@upi)
+  upiId: {
+    type: String,
+    trim: true,
+    default: function () {
+      return this.slug ? `${this.slug}@upi` : 'counter@upi';
+    }
   }
 }, { timestamps: true });
 
@@ -119,6 +150,9 @@ shopSchema.pre('save', async function () {
       candidate = `${baseSlug}-${count++}`;
     }
     this.slug = candidate;
+  }
+  if (!this.upiId && this.slug) {
+    this.upiId = `${this.slug}@upi`;
   }
 });
 

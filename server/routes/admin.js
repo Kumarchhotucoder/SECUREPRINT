@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const QRCode = require('qrcode');
 const User = require('../models/User');
 const Shop = require('../models/Shop');
@@ -183,10 +184,10 @@ router.get('/shops', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── POST /api/admin/shops — create a new shop + shopkeeper ─────
+// ── POST /api/admin/shops — create a new shop + shopkeeper (PENDING_PAYMENT) ─────
 router.post('/shops', async (req, res, next) => {
   try {
-    const { shopName, shopAddress, shopPhone, shopEmail, ownerName, ownerEmail, ownerPassword } = req.body;
+    const { shopName, shopAddress, shopPhone, shopEmail, ownerName, ownerEmail, ownerPassword, plan = 'STARTER' } = req.body;
     if (!shopName || !ownerEmail || !ownerPassword) {
       return res.status(400).json({ success: false, message: 'shopName, ownerEmail and ownerPassword are required.' });
     }
@@ -222,6 +223,11 @@ router.post('/shops', async (req, res, next) => {
       address = { street: parts[0] || '', city: parts[1] || '', state: parts[2] || '', pincode: parts[3] || '' };
     }
 
+    // Generate secure random payment token for subscription onboarding link
+    const paymentToken = crypto.randomBytes(24).toString('hex');
+    const monthlyPrice = plan === 'PRO' ? 999 : plan === 'ENTERPRISE' ? 2499 : 499;
+
+    // Create shop with state PENDING_PAYMENT (strictly gated)
     const shop = new Shop({
       name: shopName,
       slug,
@@ -229,9 +235,17 @@ router.post('/shops', async (req, res, next) => {
       phone: shopPhone,
       email: shopEmail,
       ownerId: shopkeeper._id,
+      status: 'PENDING_PAYMENT',
+      isActive: false,
       verificationStatus: 'PENDING',
-      isActive: true,
       isSetupComplete: false,
+      subscription: {
+        plan,
+        status: 'PENDING',
+        monthlyPrice,
+        paymentToken,
+        paymentTokenExpiresAt: new Date(Date.now() + 30 * 86400000)
+      },
       permanentQrDataUrl: qrDataUrl,
       permanentQrTargetUrl: qrTarget,
       permanentQrGeneratedAt: new Date(),
@@ -243,15 +257,48 @@ router.post('/shops', async (req, res, next) => {
       userId: req.user._id,
       shopId: shop._id,
       ...getRequestMeta(req),
-      metadata: { action: 'CREATE_SHOP', shopName, ownerEmail }
+      metadata: { action: 'CREATE_SHOP', shopName, ownerEmail, status: 'PENDING_PAYMENT', plan }
     });
+
+    const paymentLink = `/subscription/pay/${paymentToken}`;
 
     res.status(201).json({
       success: true,
-      message: `Shop "${shopName}" created successfully.`,
+      message: `Shop "${shopName}" created. Subscription payment is PENDING.`,
       data: {
         shop: { ...shop.toObject(), ownerId: { _id: shopkeeper._id, name: shopkeeper.name, email: shopkeeper.email } },
-        shopkeeperCredentials: { email: ownerEmail, password: ownerPassword }
+        shopkeeperCredentials: { email: ownerEmail, password: ownerPassword },
+        paymentToken,
+        paymentLink,
+        status: 'PENDING_PAYMENT',
+        subscriptionStatus: 'PENDING'
+      }
+    });
+  } catch (err) { next(err); }
+});
+
+// ── POST /api/admin/shops/:id/payment-link — generate/retrieve payment link ───
+router.post('/shops/:id/payment-link', async (req, res, next) => {
+  try {
+    const shop = await Shop.findById(req.params.id);
+    if (!shop) return res.status(404).json({ success: false, message: 'Shop not found' });
+
+    if (!shop.subscription?.paymentToken) {
+      const paymentToken = crypto.randomBytes(24).toString('hex');
+      if (!shop.subscription) shop.subscription = {};
+      shop.subscription.paymentToken = paymentToken;
+      shop.subscription.paymentTokenExpiresAt = new Date(Date.now() + 30 * 86400000);
+      await shop.save();
+    }
+
+    res.json({
+      success: true,
+      data: {
+        paymentToken: shop.subscription.paymentToken,
+        paymentLink: `/subscription/pay/${shop.subscription.paymentToken}`,
+        shopName: shop.name,
+        status: shop.status,
+        subscriptionStatus: shop.subscription?.status
       }
     });
   } catch (err) { next(err); }

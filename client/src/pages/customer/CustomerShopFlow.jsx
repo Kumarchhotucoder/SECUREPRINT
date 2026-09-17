@@ -30,6 +30,9 @@ const CustomerShopFlow = () => {
   const [colorMode, setColorMode] = useState('BW')
   const [paperSize, setPaperSize] = useState('A4')
   const [duplex, setDuplex] = useState(false)
+  const [orientation, setOrientation] = useState('PORTRAIT')
+  const [pageRangeType, setPageRangeType] = useState('ALL')
+  const [customPageRange, setCustomPageRange] = useState('')
   const [sending, setSending] = useState(false)
   const [sendProgress, setSendProgress] = useState('')
 
@@ -154,12 +157,15 @@ const CustomerShopFlow = () => {
       setSendProgress('Sending to merchant print queue...')
 
       // Step B: Submit print job directly to merchant
+      const finalPageRange = pageRangeType === 'CUSTOM' && customPageRange.trim() ? customPageRange.trim() : 'ALL'
       const jobRes = await api.post('/jobs', {
         sessionId: session.sessionId,
         copies,
         colorMode,
         paperSize,
         duplex,
+        orientation,
+        pageRange: finalPageRange,
         customerName: session.customerName || customerName.trim()
       }, {
         headers: {
@@ -225,23 +231,24 @@ const CustomerShopFlow = () => {
           }}>
             <AlertTriangle size={32} />
           </div>
-          <h2 style={{ fontSize: 'var(--font-size-2xl)', marginBottom: 'var(--space-2)' }}>
-            Shop Currently Unavailable
+          <h2 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 800, marginBottom: 'var(--space-2)' }}>
+            {shop?.name || 'SecurePrint Counter'}
           </h2>
           <div style={{
-            background: 'var(--color-surface-2)',
-            padding: 'var(--space-3) var(--space-4)',
-            borderRadius: 'var(--radius-md)',
-            fontWeight: 700,
-            fontSize: 'var(--font-size-md)',
-            color: 'var(--color-text)',
-            marginBottom: 'var(--space-4)'
+            background: '#FEF3C7',
+            border: '1px solid #FDE68A',
+            padding: 'var(--space-4)',
+            borderRadius: 'var(--radius-lg)',
+            margin: 'var(--space-4) 0',
+            color: '#92400E'
           }}>
-            {shop?.name || 'SecurePrint Counter'}
+            <p style={{ fontSize: 'var(--font-size-md)', fontWeight: 700, margin: '0 0 6px' }}>
+              This shop is currently not accepting print requests.
+            </p>
+            <p style={{ fontSize: 'var(--font-size-sm)', margin: 0, opacity: 0.9 }}>
+              Please try again later.
+            </p>
           </div>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', lineHeight: 1.6, marginBottom: 'var(--space-6)' }}>
-            This SecurePrint shop is currently unavailable. The counter may be closed or temporarily paused by the shopkeeper.
-          </p>
           <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'center' }}>
             <button className="btn btn-secondary" onClick={fetchShop}>
               <RefreshCw size={16} /> Check Again
@@ -463,7 +470,7 @@ const CustomerShopFlow = () => {
               style={{ gap: 8, boxShadow: 'var(--shadow-primary)' }}
               onClick={openFilePicker}
             >
-              <Plus size={18} /> + SELECT DOCUMENTS
+              <Plus size={18} /> Upload Document
             </button>
           </div>
 
@@ -603,7 +610,7 @@ const CustomerShopFlow = () => {
           {/* Paper Size & Sides */}
           <div className="card" style={{ padding: 'var(--space-4)' }}>
             <label className="form-label" style={{ fontWeight: 700, fontSize: 'var(--font-size-xs)', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>
-              Paper & Sides
+              Paper & Duplex
             </label>
             <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
               <select
@@ -625,6 +632,55 @@ const CustomerShopFlow = () => {
               >
                 {duplex ? 'Double Sided' : 'Single Sided'}
               </button>
+            </div>
+          </div>
+
+          {/* Orientation & Page Range */}
+          <div className="card" style={{ padding: 'var(--space-4)' }}>
+            <label className="form-label" style={{ fontWeight: 700, fontSize: 'var(--font-size-xs)', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>
+              Orientation & Pages
+            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <button
+                  type="button"
+                  className={`btn ${orientation === 'PORTRAIT' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ flex: 1, padding: '8px 4px', fontSize: 'var(--font-size-xs)' }}
+                  onClick={() => setOrientation('PORTRAIT')}
+                >
+                  Portrait
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${orientation === 'LANDSCAPE' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ flex: 1, padding: '8px 4px', fontSize: 'var(--font-size-xs)' }}
+                  onClick={() => setOrientation('LANDSCAPE')}
+                >
+                  Landscape
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <select
+                  className="form-input"
+                  style={{ width: 110, fontSize: 'var(--font-size-xs)' }}
+                  value={pageRangeType}
+                  onChange={(e) => setPageRangeType(e.target.value)}
+                >
+                  <option value="ALL">All Pages</option>
+                  <option value="CUSTOM">Custom</option>
+                </select>
+                {pageRangeType === 'CUSTOM' && (
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ flex: 1, fontSize: 'var(--font-size-xs)' }}
+                    placeholder="e.g. 1-5, 8"
+                    value={customPageRange}
+                    onChange={(e) => setCustomPageRange(e.target.value)}
+                  />
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -662,12 +718,12 @@ const CustomerShopFlow = () => {
               {sending ? (
                 <>
                   <div className="spinner" />
-                  <span>{sendProgress || 'Sending...'}</span>
+                  <span>{sendProgress || 'Sending to shop...'}</span>
                 </>
               ) : (
                 <>
                   <Send size={20} />
-                  <span>SEND FOR PRINT</span>
+                  <span>Send to Shop</span>
                 </>
               )}
             </button>

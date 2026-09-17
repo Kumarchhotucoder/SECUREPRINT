@@ -137,11 +137,26 @@ io.on('connection', (socket) => {
   // Agent connection handler
   socket.on('join-agent', async ({ agentId, shopId }) => {
     if (!agentId || !shopId) return;
-    socket.agentId = agentId;
-    socket.shopId = shopId;
-    socket.join(`agent-${agentId}`);
 
+    // Verify shop subscription state machine
     try {
+      const Shop = require('./models/Shop');
+      const shop = await Shop.findById(shopId);
+      if (!shop || shop.status !== 'ACTIVE' || !shop.isActive || shop.subscription?.status !== 'ACTIVE') {
+        console.warn(`[AGENT REJECTED] Connection rejected for Agent ${agentId} — Shop ${shopId} subscription inactive.`);
+        socket.emit('agent-error', {
+          code: 'AGENT_CONNECTION_REJECTED',
+          reason: 'SUBSCRIPTION_REQUIRED',
+          message: 'Your SecurePrint subscription is inactive. Please complete your subscription payment.'
+        });
+        socket.disconnect(true);
+        return;
+      }
+
+      socket.agentId = agentId;
+      socket.shopId = shopId;
+      socket.join(`agent-${agentId}`);
+
       await Agent.findOneAndUpdate(
         { agentId, shopId },
         { status: 'ONLINE', lastSeenAt: new Date() }

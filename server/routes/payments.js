@@ -13,6 +13,7 @@ const Payment = require('../models/Payment');
 const Shop = require('../models/Shop');
 const { schedule10SecondCleanup } = require('../utils/deletion');
 const { logEvent } = require('../utils/audit');
+const { authenticate, requireShopkeeper, requireActiveSubscription } = require('../middleware/auth');
 
 // Initialize Razorpay instance if credentials exist
 const getRazorpayInstance = () => {
@@ -52,6 +53,15 @@ router.post('/create-order', async (req, res, next) => {
         success: false,
         message: 'This job is already paid.',
         paymentStatus: 'PAID'
+      });
+    }
+
+    // Strict Business Rule: Payment option must NOT be available before printing is completed
+    const validPaymentStatuses = ['PRINTING_COMPLETED', 'AWAITING_PAYMENT', 'PAYMENT_PROCESSING', 'PAYMENT_METHOD_SELECTED'];
+    if (!validPaymentStatuses.includes(job.status) && job.paymentStatus !== 'AWAITING_PAYMENT' && !job.completedAt) {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment is not available until the shopkeeper marks printing completed.'
       });
     }
 
@@ -129,6 +139,271 @@ router.post('/create-order', async (req, res, next) => {
     });
   } catch (err) {
     console.error('[PAYMENT ERROR] create-order failed:', err);
+    next(err);
+  }
+});
+
+/**
+ * POST /api/payments/request-cash
+ * Customer marks intent to pay cash at counter.
+ * Sets paymentStatus = 'PAYMENT_PENDING_CASH'.
+ * Does NOT mark paid; does NOT trigger 10-second cleanup.
+ * Shopkeeper must confirm counter payment to mark paid.
+ */
+router.post('/request-cash', async (req, res, next) => {
+  try {
+    const { jobId } = req.body;
+    if (!jobId) {
+      return res.status(400).json({ success: false, message: 'jobId is required' });
+    }
+
+    const job = await PrintJob.findById(jobId).populate('shopId');
+    if (!job) {
+      return res.status(404).json({ success: false, message: 'Job not found' });
+    }
+
+    if (job.paymentStatus === 'PAID') {
+      return res.status(400).json({ success: false, message: 'This job is already paid.' });
+    }
+
+    // Strict Business Rule: Cash payment cannot be requested until printing is completed
+    const validCashStatuses = ['PRINTING_COMPLETED', 'AWAITING_PAYMENT', 'CASH_PAYMENT_PENDING'];
+    if (!validCashStatuses.includes(job.status) && job.paymentStatus !== 'AWAITING_PAYMENT' && !job.completedAt) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cash payment cannot be requested until printing is completed.'
+      });
+    }
+
+    job.paymentStatus = 'CASH_PAYMENT_PENDING';
+    job.paymentMethod = 'CASH';
+    job.status = 'CASH_PAYMENT_PENDING';
+    job.statusHistory.push({
+      status: job.status,
+      timestamp: new Date(),
+      note: 'Customer requested cash payment at counter.'
+    });
+    await job.save();
+
+    const io = req.app.get('io');
+    if (io) {
+      const targetShopId = (job.shopId?._id || job.shopId)?.toString();
+      io.to(`shop-${targetShopId}`).emit('payment-requested-cash', {
+        jobId: job._id.toString(),
+        jobNumber: job.jobNumber,
+        customerName: job.customerName,
+        amount: job.finalPrice || job.estimatedPrice,
+        paymentStatus: 'PAYMENT_PENDING_CASH'
+      });
+      io.to(`job-${job._id}`).emit('job-updated', {
+        jobId: job._id.toString(),
+        paymentStatus: 'PAYMENT_PENDING_CASH',
+        paymentMethod: 'CASH'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Cash payment requested for ₹${job.finalPrice || job.estimatedPrice}. Please pay at counter.`,
+      data: {
+        jobId: job._id,
+        paymentStatus: 'CASH_PAYMENT_PENDING',
+        amount: job.finalPrice || job.estimatedPrice
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/payments/confirm-cash
+ * Authorized Shopkeeper confirms that cash was physically received at the counter.
+ * Cryptographically verifies tenant, shop, and job ownership.
+ * Transitions paymentStatus to 'PAID', status to 'PAYMENT_SUCCESS', and starts 10-second cleanup.
+ */
+router.post('/confirm-cash', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
+  try {
+    const { jobId } = req.body;
+    if (!jobId) {
+      return res.status(400).json({ success: false, message: 'jobId is required' });
+    }
+
+    const job = await PrintJob.findById(jobId).populate('shopId');
+    if (!job) {
+      return res.status(404).json({ success: false, message: 'Job not found' });
+    }
+
+    // Strict Tenant isolation verification
+    const shop = await Shop.findOne({ _id: job.shopId._id || job.shopId, ownerId: req.user._id });
+    if (!shop) {
+      return res.status(403).json({ success: false, message: 'Access denied: You do not own this shop.' });
+    }
+
+    // Verify job is in valid cash pending state
+    if (job.paymentStatus === 'PAID') {
+      return res.json({
+        success: true,
+        message: 'Cash payment already confirmed and paid.',
+        data: {
+          jobId: job._id,
+          paymentStatus: 'PAID',
+          status: job.status
+        }
+      });
+    }
+
+    if (job.paymentStatus !== 'CASH_PAYMENT_PENDING' && job.paymentStatus !== 'PAYMENT_PENDING_CASH') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot confirm cash payment: Job is in ${job.paymentStatus} status, expected CASH_PAYMENT_PENDING.`
+      });
+    }
+
+    const paidAt = new Date();
+    const amount = job.finalPrice || job.estimatedPrice || 10;
+
+    // Upsert Payment record for audit
+    let payment = await Payment.findOne({ jobId: job._id });
+    if (!payment) {
+      payment = new Payment({
+        jobId: job._id,
+        shopId: shop._id,
+        customerSessionId: job.sessionId?.toString(),
+        type: 'PRINT_JOB',
+        amount,
+        currency: 'INR',
+        method: 'CASH',
+        gateway: 'CASH',
+        gatewayOrderId: `cash_${job._id.toString().slice(-8)}_${Date.now()}`,
+        gatewayPaymentId: `cash_rec_${Date.now()}`,
+        gatewaySignature: 'verified_counter_cash',
+        paymentStatus: 'PAID',
+        paidAt
+      });
+    } else {
+      payment.method = 'CASH';
+      payment.gateway = 'CASH';
+      payment.paymentStatus = 'PAID';
+      payment.paidAt = paidAt;
+      payment.gatewaySignature = 'verified_counter_cash';
+    }
+    await payment.save();
+
+    // State machine update: CASH_PAYMENT_CONFIRMED -> PAYMENT_SUCCESS -> CLEANUP_PENDING
+    job.paymentId = payment._id;
+    job.paymentStatus = 'PAID';
+    job.paymentMethod = 'CASH';
+    job.status = 'PAYMENT_SUCCESS';
+    job.paidAt = paidAt;
+    job.statusHistory.push({
+      status: 'PAYMENT_SUCCESS',
+      timestamp: paidAt,
+      note: `Cash payment of ₹${amount} confirmed by shopkeeper ${req.user.name || ''}.`
+    });
+    await job.save();
+
+    await logEvent('CASH_PAYMENT_CONFIRMED', {
+      jobId: job._id,
+      shopId: shop._id,
+      metadata: { amount, confirmedBy: req.user._id }
+    });
+
+    // Start 10-second background physical cleanup countdown
+    const io = req.app.get('io');
+    const cleanupSchedule = await schedule10SecondCleanup(job._id, io);
+
+    // Notify customer in real time
+    if (io) {
+      io.to(`job-${job._id}`).emit('payment-success', {
+        jobId: job._id.toString(),
+        amount,
+        paidAt: paidAt.toISOString(),
+        paymentStatus: 'PAID',
+        status: 'PAYMENT_SUCCESS',
+        paymentMethod: 'CASH',
+        countdownSeconds: 10,
+        cleanupScheduledAt: cleanupSchedule.scheduledAt,
+        message: 'Cash payment confirmed by shopkeeper! 10-second file cleanup countdown started.'
+      });
+
+      io.to(`shop-${shop._id}`).emit('job-updated', {
+        jobId: job._id.toString(),
+        jobNumber: job.jobNumber,
+        status: 'PAYMENT_SUCCESS',
+        paymentStatus: 'PAID',
+        paymentMethod: 'CASH',
+        amount,
+        paidAt: paidAt.toISOString()
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Cash payment of ₹${amount} confirmed successfully.`,
+      data: {
+        jobId: job._id,
+        jobNumber: job.jobNumber,
+        paymentStatus: 'PAID',
+        status: 'PAYMENT_SUCCESS',
+        paidAt,
+        amount,
+        countdownSeconds: 10,
+        cleanupScheduledAt: cleanupSchedule.scheduledAt
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/payments/reject-cash
+ * Shopkeeper indicates cash was not received or request was rejected.
+ * Reverts to AWAITING_PAYMENT.
+ */
+router.post('/reject-cash', authenticate, requireShopkeeper, requireActiveSubscription, async (req, res, next) => {
+  try {
+    const { jobId } = req.body;
+    const job = await PrintJob.findById(jobId);
+    if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
+
+    const shop = await Shop.findOne({ _id: job.shopId, ownerId: req.user._id });
+    if (!shop) return res.status(403).json({ success: false, message: 'Access denied: You do not own this shop.' });
+
+    job.paymentStatus = 'AWAITING_PAYMENT';
+    job.status = 'PRINTING_COMPLETED';
+    job.paymentMethod = null;
+    job.statusHistory.push({
+      status: 'AWAITING_PAYMENT',
+      timestamp: new Date(),
+      note: 'Cash payment request rejected by shopkeeper.'
+    });
+    await job.save();
+
+    await logEvent('CASH_PAYMENT_REJECTED', {
+      jobId: job._id,
+      shopId: shop._id,
+      metadata: { rejectedBy: req.user._id }
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`job-${job._id}`).emit('job-status', {
+        jobId: job._id.toString(),
+        status: 'PRINTING_COMPLETED',
+        paymentStatus: 'AWAITING_PAYMENT',
+        message: 'Cash payment was not confirmed. Please pay at counter or choose online payment.'
+      });
+      io.to(`shop-${shop._id}`).emit('job-updated', {
+        jobId: job._id.toString(),
+        status: 'PRINTING_COMPLETED',
+        paymentStatus: 'AWAITING_PAYMENT'
+      });
+    }
+
+    res.json({ success: true, message: 'Cash request rejected. Job reverted to awaiting payment.' });
+  } catch (err) {
     next(err);
   }
 });

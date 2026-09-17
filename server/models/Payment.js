@@ -30,6 +30,11 @@ const paymentSchema = new mongoose.Schema({
     type: String,
     default: 'INR'
   },
+  method: {
+    type: String,
+    enum: ['ONLINE', 'CASH', 'UPI', 'RAZORPAY', 'MANUAL'],
+    default: 'ONLINE'
+  },
   gateway: {
     type: String,
     enum: ['RAZORPAY', 'CASH', 'UPI_DIRECT', 'MANUAL'],
@@ -51,7 +56,7 @@ const paymentSchema = new mongoose.Schema({
   },
   paymentStatus: {
     type: String,
-    enum: ['PENDING', 'PROCESSING', 'PAID', 'FAILED', 'CANCELLED'],
+    enum: ['PENDING', 'PROCESSING', 'PAID', 'SUCCESS', 'FAILED', 'CANCELLED'],
     default: 'PENDING',
     index: true
   },
@@ -63,6 +68,10 @@ const paymentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed,
     default: {}
   }
-}, { timestamps: true });
+}, { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });
+
+paymentSchema.virtual('tenant_id').get(function () {
+  return this.shopId;
+});
 
 module.exports = mongoose.model('Payment', paymentSchema);
